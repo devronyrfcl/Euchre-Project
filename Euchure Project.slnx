@@ -1,0 +1,4 @@
+﻿<Solution>
+  <Project Path="Coffee.UIParticle.csproj" />
+  <Project Path="Coffee.UIParticle.Editor.csproj" />
+</Solution>
