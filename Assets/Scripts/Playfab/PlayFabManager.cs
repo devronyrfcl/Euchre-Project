@@ -12,6 +12,26 @@ using UnityEngine.Networking;
 using UnityEngine.UI;
 using static NativeGallery;
 
+[Serializable]
+public class PlayerStatsData
+{
+    public int playerLevel;
+    public int playerXP;
+    public int playerWin;
+
+    public int totalWinCoins;
+    public int totalGamePoints;
+    public int totalWinGP;
+
+    public int totalGamesPlayed;
+    public int totalGamesWon;
+
+    public int totalTournPlayed;
+    public int totalTournWon;
+
+    public int totalTrophy;
+}
+
 /// <summary>
 /// PlayFabManager — Eurchre Project
 /// Handles: Splash/Loading, Signup, Login, Error states,
@@ -70,7 +90,8 @@ public class PlayFabManager : MonoBehaviour
     [SerializeField] private TMP_Text[] totalTournamentsPlayedTexts;
     [SerializeField] private TMP_Text[] totalTournamentsWonTexts;
     [SerializeField] private TMP_Text[] totalTrophyTexts;
-    [SerializeField] private TMP_Text[] email;
+    [SerializeField] private TMP_Text[] emailTexts;
+    [SerializeField] private TMP_Text[] playFabIdTexts;
 
     [Header("=== LOGIN / SIGNUP PANELS ===")]
     [SerializeField] private GameObject middlePanelForLogin;
@@ -94,17 +115,7 @@ public class PlayFabManager : MonoBehaviour
     private const float MIN_LOAD_SECONDS = 3f;
 
     // PlayFab data keys
-    private const string KEY_LEVEL = "Player_Level";
-    private const string KEY_XP = "Player_XP";
-    private const string KEY_WIN = "Player_Win";
-    private const string KEY_WIN_COINS = "Stat_WinCoins";
-    private const string KEY_GAME_PTS = "Stat_GamePoints";
-    private const string KEY_WIN_GP = "Stat_WinGoldenPass";
-    private const string KEY_GAMES_PLAYED = "Stat_GamesPlayed";
-    private const string KEY_GAMES_WON = "Stat_GamesWon";
-    private const string KEY_TOURN_PLAYED = "Stat_TournPlayed";
-    private const string KEY_TOURN_WON = "Stat_TournWon";
-    private const string KEY_TOTAL_TROPHY = "Stat_TotalTrophy";
+    private const string KEY_PLAYER_STATS = "PlayerStats";
 
     // ─────────────────────────────────────────────────────────────
     //  XP → Level table
@@ -151,6 +162,9 @@ public class PlayFabManager : MonoBehaviour
     private bool _playfabReady = false;
     private bool _playfabFailed = false;
     private string _playfabError = "";
+
+    private string _playFabId = "";
+    private string _playerEmail = "";
 
     // ─────────────────────────────────────────────────────────────
     //  Unity Lifecycle
@@ -391,6 +405,7 @@ public class PlayFabManager : MonoBehaviour
     //  Step 3: Currencies           — inside step 2 callback
     // ─────────────────────────────────────────────────────────────
 
+    // Step 1: Fetch Display Name (and show set-name panel if missing)
     private void FetchProfileAndStats()
     {
         PlayFabClientAPI.GetPlayerProfile(
@@ -416,6 +431,8 @@ public class PlayFabManager : MonoBehaviour
             });
     }
 
+    
+
 
 
     // ─────────────────────────────────────────────────────────────
@@ -428,10 +445,7 @@ public class PlayFabManager : MonoBehaviour
 
         var keys = new List<string>
         {
-            KEY_LEVEL, KEY_XP, KEY_WIN,
-            KEY_WIN_COINS, KEY_GAME_PTS, KEY_WIN_GP,
-            KEY_GAMES_PLAYED, KEY_GAMES_WON,
-            KEY_TOURN_PLAYED, KEY_TOURN_WON, KEY_TOTAL_TROPHY
+            KEY_PLAYER_STATS
         };
 
         PlayFabClientAPI.GetUserData(
@@ -442,73 +456,92 @@ public class PlayFabManager : MonoBehaviour
                 bool anyMissing = false;
 
                 // ── Core progression ──────────────────────────────
-                if (data.ContainsKey(KEY_LEVEL))
-                    int.TryParse(data[KEY_LEVEL].Value, out _playerLevel);
-                else { _playerLevel = 1; anyMissing = true; }
+                if (data.ContainsKey(KEY_PLAYER_STATS))
+                {
+                    string json = data[KEY_PLAYER_STATS].Value;
 
-                if (data.ContainsKey(KEY_XP))
-                    int.TryParse(data[KEY_XP].Value, out _playerXP);
-                else { _playerXP = 0; anyMissing = true; }
+                    PlayerStatsData stats =
+                        JsonUtility.FromJson<PlayerStatsData>(json);
 
-                if (data.ContainsKey(KEY_WIN))
-                    int.TryParse(data[KEY_WIN].Value, out _playerWin);
-                else { _playerWin = 0; anyMissing = true; }
+                    if (stats != null)
+                    {
+                        _playerLevel = stats.playerLevel;
+                        _playerXP = stats.playerXP;
+                        _playerWin = stats.playerWin;
 
-                // ── Extended stats ────────────────────────────────
-                if (data.ContainsKey(KEY_WIN_COINS))
-                    int.TryParse(data[KEY_WIN_COINS].Value, out _totalWinCoins);
-                else { _totalWinCoins = 0; anyMissing = true; }
+                        _totalWinCoins = stats.totalWinCoins;
+                        _totalGamePoints = stats.totalGamePoints;
+                        _totalWinGP = stats.totalWinGP;
 
-                if (data.ContainsKey(KEY_GAME_PTS))
-                    int.TryParse(data[KEY_GAME_PTS].Value, out _totalGamePoints);
-                else { _totalGamePoints = 0; anyMissing = true; }
+                        _totalGamesPlayed = stats.totalGamesPlayed;
+                        _totalGamesWon = stats.totalGamesWon;
 
-                if (data.ContainsKey(KEY_WIN_GP))
-                    int.TryParse(data[KEY_WIN_GP].Value, out _totalWinGP);
-                else { _totalWinGP = 0; anyMissing = true; }
+                        _totalTournPlayed = stats.totalTournPlayed;
+                        _totalTournWon = stats.totalTournWon;
 
-                if (data.ContainsKey(KEY_GAMES_PLAYED))
-                    int.TryParse(data[KEY_GAMES_PLAYED].Value, out _totalGamesPlayed);
-                else { _totalGamesPlayed = 0; anyMissing = true; }
-
-                if (data.ContainsKey(KEY_GAMES_WON))
-                    int.TryParse(data[KEY_GAMES_WON].Value, out _totalGamesWon);
-                else { _totalGamesWon = 0; anyMissing = true; }
-
-                if (data.ContainsKey(KEY_TOURN_PLAYED))
-                    int.TryParse(data[KEY_TOURN_PLAYED].Value, out _totalTournPlayed);
-                else { _totalTournPlayed = 0; anyMissing = true; }
-
-                if (data.ContainsKey(KEY_TOURN_WON))
-                    int.TryParse(data[KEY_TOURN_WON].Value, out _totalTournWon);
-                else { _totalTournWon = 0; anyMissing = true; }
-
-                if (data.ContainsKey(KEY_TOTAL_TROPHY))
-                    int.TryParse(data[KEY_TOTAL_TROPHY].Value, out _totalTrophy);
+                        _totalTrophy = stats.totalTrophy;
+                    }
+                }
                 else
                 {
+                    _playerLevel = 1;
+                    _playerXP = 0;
+                    _playerWin = 0;
+
+                    _totalWinCoins = 0;
+                    _totalGamePoints = 0;
+                    _totalWinGP = 0;
+
+                    _totalGamesPlayed = 0;
+                    _totalGamesWon = 0;
+
+                    _totalTournPlayed = 0;
+                    _totalTournWon = 0;
+
                     _totalTrophy = 0;
-                    anyMissing = true;
-                }
 
-                // If any key was missing, push defaults to server immediately
-                if (anyMissing)
                     SaveStatsToServer();
-
-                RefreshAllStatTexts();
-
-                // Step 3
-                FetchCurrencies();
+                }
             },
             error =>
             {
                 Debug.LogError("[PlayFabManager] GetUserData: " + error.GenerateErrorReport());
                 // Use defaults, push them, still show UI
                 SaveStatsToServer();
+                LoadAccountInfo();
+                RefreshAllStatTexts();
+                FetchCurrencies();
+            });
+        
+        
+    }
+    
+    private void LoadAccountInfo()
+    {
+        PlayFabClientAPI.GetAccountInfo(
+            new GetAccountInfoRequest(),
+            result =>
+            {
+                _playFabId = result.AccountInfo.PlayFabId;
+                _playerEmail = result.AccountInfo.PrivateInfo?.Email ?? "N/A";
+
+                SetTextArray(playFabIdTexts, _playFabId);
+                SetTextArray(emailTexts, _playerEmail);
+
+                RefreshAllStatTexts();
+                FetchCurrencies();
+            },
+            error =>
+            {
+                SetTextArray(playFabIdTexts, "--");
+                SetTextArray(emailTexts, "--");
+
                 RefreshAllStatTexts();
                 FetchCurrencies();
             });
     }
+
+    
 
     // ─────────────────────────────────────────────────────────────
     //  Fetch Virtual Currencies
@@ -710,25 +743,43 @@ public class PlayFabManager : MonoBehaviour
     /// </summary>
     public void SaveStatsToServer()
     {
-        var payload = new Dictionary<string, string>
+        PlayerStatsData stats = new PlayerStatsData
         {
-            { KEY_LEVEL,        _playerLevel.ToString()      },
-            { KEY_XP,           _playerXP.ToString()         },
-            { KEY_WIN,          _playerWin.ToString()         },
-            { KEY_WIN_COINS,    _totalWinCoins.ToString()     },
-            { KEY_GAME_PTS,     _totalGamePoints.ToString()   },
-            { KEY_WIN_GP,       _totalWinGP.ToString()        },
-            { KEY_GAMES_PLAYED, _totalGamesPlayed.ToString()  },
-            { KEY_GAMES_WON,    _totalGamesWon.ToString()     },
-            { KEY_TOURN_PLAYED, _totalTournPlayed.ToString()  },
-            { KEY_TOURN_WON,    _totalTournWon.ToString()     },
-            { KEY_TOTAL_TROPHY, _totalTrophy.ToString()       }
+            playerLevel = _playerLevel,
+            playerXP = _playerXP,
+            playerWin = _playerWin,
+
+            totalWinCoins = _totalWinCoins,
+            totalGamePoints = _totalGamePoints,
+            totalWinGP = _totalWinGP,
+
+            totalGamesPlayed = _totalGamesPlayed,
+            totalGamesWon = _totalGamesWon,
+
+            totalTournPlayed = _totalTournPlayed,
+            totalTournWon = _totalTournWon,
+
+            totalTrophy = _totalTrophy
         };
 
+        string json = JsonUtility.ToJson(stats);
+
         PlayFabClientAPI.UpdateUserData(
-            new UpdateUserDataRequest { Data = payload },
-            result => Debug.Log("[PlayFabManager] Stats saved to server."),
-            error => Debug.LogError("[PlayFabManager] SaveStats error: " + error.GenerateErrorReport()));
+            new UpdateUserDataRequest
+            {
+                Data = new Dictionary<string, string>
+                {
+                    { KEY_PLAYER_STATS, json }
+                }
+            },
+            result =>
+            {
+                Debug.Log("[PlayFabManager] Stats saved successfully.");
+            },
+            error =>
+            {
+                Debug.LogError("[PlayFabManager] SaveStats error: " + error.GenerateErrorReport());
+            });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -748,6 +799,7 @@ public class PlayFabManager : MonoBehaviour
         SetTextArray(totalTournamentsPlayedTexts, _totalTournPlayed.ToString());
         SetTextArray(totalTournamentsWonTexts, _totalTournWon.ToString());
         SetTextArray(totalTrophyTexts, _totalTrophy.ToString());
+        
 
         
     }
@@ -803,6 +855,8 @@ public class PlayFabManager : MonoBehaviour
                 Debug.Log("[PlayFabManager] Logged in: " + result.PlayFabId);
                 _playfabReady = true;
                 onSuccess?.Invoke();
+                
+
             },
             error =>
             {
@@ -1165,6 +1219,8 @@ public class PlayFabManager : MonoBehaviour
         {
             var response = JsonUtility.FromJson<CloudinaryResponse>(www.downloadHandler.text);
             SaveImageUrlToPlayFab(response.secure_url);
+            
+            ShowInlineError("Profile picture updated successfully.");
         }
         else
         {
@@ -1208,8 +1264,12 @@ public class PlayFabManager : MonoBehaviour
             Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
             foreach (var img in profileImages)
             {
-                img.sprite = sprite;
+                if (img != null)
+                    img.sprite = sprite;
             }
+
+            // Success message
+            
 
         }
     }
