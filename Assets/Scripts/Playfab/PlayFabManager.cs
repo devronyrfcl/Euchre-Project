@@ -1,13 +1,16 @@
-﻿using System;
+﻿using DG.Tweening;
+using Lean.Gui;
+using PlayFab;
+using PlayFab.ClientModels;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
-using DG.Tweening;
-using PlayFab;
-using PlayFab.ClientModels;
+using UnityEngine;
+using UnityEngine.Networking;
+using UnityEngine.UI;
+using static NativeGallery;
 
 /// <summary>
 /// PlayFabManager — Eurchre Project
@@ -25,17 +28,23 @@ public class PlayFabManager : MonoBehaviour
     [SerializeField] private GameObject splashAndLoading;
     [SerializeField] private GameObject mainSplashPanel;
     [SerializeField] private GameObject signupPanel;
+    [SerializeField] private GameObject loginPanel;
     [SerializeField] private GameObject mainMenuPanel;
-    [SerializeField] private GameObject errorPanel;
+    //[SerializeField] private GameObject errorPanel;
+    [SerializeField] private LeanWindow errorPanel;
 
     [Header("=== SET NAME PANEL ===")]
-    [SerializeField] private GameObject setNamePanel;
+    //[SerializeField] private GameObject setNamePanel;
+    [SerializeField] private LeanWindow setNamePanel;
     [SerializeField] private TMP_InputField setNameInputField;
+    //profile pic raw image array
+    [SerializeField] private Image[] profileImages;
 
     [Header("=== SPLASH / LOADING ===")]
     [SerializeField] private Transform splashScreenLogo;
     [SerializeField] private RectTransform firstLoadingParent;
     [SerializeField] private Image firstLoadingFill;
+    [SerializeField] private TMP_Text loadingText;
 
     [Header("=== SIGNUP ===")]
     [SerializeField] private TMP_InputField signupEmailInput;
@@ -60,6 +69,20 @@ public class PlayFabManager : MonoBehaviour
     [SerializeField] private TMP_Text[] totalGamesWonTexts;
     [SerializeField] private TMP_Text[] totalTournamentsPlayedTexts;
     [SerializeField] private TMP_Text[] totalTournamentsWonTexts;
+    [SerializeField] private TMP_Text[] totalTrophyTexts;
+    [SerializeField] private TMP_Text[] email;
+
+    [Header("=== LOGIN / SIGNUP PANELS ===")]
+    [SerializeField] private GameObject middlePanelForLogin;
+    [SerializeField] private GameObject middlePanelForSignUp;
+
+    [Header("=== LEADERBOARD ===")]
+    [SerializeField] private GameObject leaderboardPanel;
+
+    [SerializeField] private RectTransform leaderboardContent;
+
+    [SerializeField] private GameObject myLeaderboardCardPrefab;
+    [SerializeField] private GameObject otherLeaderboardCardPrefab;
 
 
     // ─────────────────────────────────────────────────────────────
@@ -81,6 +104,7 @@ public class PlayFabManager : MonoBehaviour
     private const string KEY_GAMES_WON = "Stat_GamesWon";
     private const string KEY_TOURN_PLAYED = "Stat_TournPlayed";
     private const string KEY_TOURN_WON = "Stat_TournWon";
+    private const string KEY_TOTAL_TROPHY = "Stat_TotalTrophy";
 
     // ─────────────────────────────────────────────────────────────
     //  XP → Level table
@@ -118,6 +142,7 @@ public class PlayFabManager : MonoBehaviour
     private int _totalGamesWon = 0;
     private int _totalTournPlayed = 0;
     private int _totalTournWon = 0;
+    private int _totalTrophy = 0;
 
     // ─────────────────────────────────────────────────────────────
     //  PlayFab flow state
@@ -132,13 +157,26 @@ public class PlayFabManager : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
 
     private void Awake() => DOTween.Init();
+    public int TotalTrophy => _totalTrophy;
+
+    [System.Serializable]
+    public class CloudinaryResponse { public string secure_url; }
 
     private void Start()
     {
         SetAllPanelsOff();
+
+        if (middlePanelForLogin)
+            middlePanelForLogin.transform.localScale = Vector3.zero;
+
+        if (middlePanelForSignUp)
+            middlePanelForSignUp.transform.localScale = Vector3.zero;
+
         splashAndLoading.SetActive(true);
         mainSplashPanel.SetActive(true);
         StartCoroutine(InitialLoadingFlow());
+
+
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -150,8 +188,16 @@ public class PlayFabManager : MonoBehaviour
         yield return StartCoroutine(PlaySplashAnimation());
 
         firstLoadingFill.fillAmount = 0f;
+
         float elapsed = 0f;
         bool errorShown = false;
+
+        // Loading text animation
+        float loadingTextTimer = 0f;
+        int loadingDotState = 0;
+
+        if (loadingText != null)
+            loadingText.text = "Loading.";
 
         ResetPlayFabState();
         CheckInternetConnection();
@@ -160,26 +206,62 @@ public class PlayFabManager : MonoBehaviour
         {
             elapsed += Time.deltaTime;
 
+            // Loading. -> Loading.. -> Loading... -> Loading....
+            loadingTextTimer += Time.deltaTime;
+
+            if (loadingTextTimer >= 0.3f)
+            {
+                loadingTextTimer = 0f;
+
+                loadingDotState++;
+
+                if (loadingDotState > 4)
+                    loadingDotState = 1;
+
+                if (loadingText != null)
+                    loadingText.text = "Loading" + new string('.', loadingDotState);
+            }
+
             if (_playfabFailed && !errorShown)
             {
                 errorShown = true;
-                yield return firstLoadingFill.DOFillAmount(0.3f, 0.4f).SetEase(Ease.OutQuad).WaitForCompletion();
+
+                yield return firstLoadingFill
+                    .DOFillAmount(0.3f, 0.4f)
+                    .SetEase(Ease.OutQuad)
+                    .WaitForCompletion();
+
                 yield return new WaitForSeconds(0.5f);
+
                 ShowError(_playfabError);
                 yield break;
             }
 
             if (_playfabReady && elapsed >= MIN_LOAD_SECONDS)
             {
-                yield return firstLoadingFill.DOFillAmount(1f, 0.35f).SetEase(Ease.OutQuad).WaitForCompletion();
+                /*if (loadingText != null)
+                    loadingText.text = "Loading Complete";*/
+
+                yield return firstLoadingFill
+                    .DOFillAmount(1f, 0.35f)
+                    .SetEase(Ease.OutQuad)
+                    .WaitForCompletion();
+
                 yield return new WaitForSeconds(0.2f);
+
                 DecideLoginPath();
                 yield break;
             }
 
             float naturalTarget = Mathf.Clamp01(elapsed / MIN_LOAD_SECONDS) * 0.9f;
+
             if (firstLoadingFill.fillAmount < naturalTarget)
-                firstLoadingFill.fillAmount = Mathf.Lerp(firstLoadingFill.fillAmount, naturalTarget, Time.deltaTime * 3f);
+            {
+                firstLoadingFill.fillAmount = Mathf.Lerp(
+                    firstLoadingFill.fillAmount,
+                    naturalTarget,
+                    Time.deltaTime * 3f);
+            }
 
             yield return null;
         }
@@ -257,7 +339,7 @@ public class PlayFabManager : MonoBehaviour
         else
         {
             splashAndLoading.SetActive(false);
-            signupPanel.SetActive(true);
+            TurnOnSignUpPanel();
         }
     }
 
@@ -274,7 +356,7 @@ public class PlayFabManager : MonoBehaviour
         if (pass.Length < 6) { ShowInlineError("Password must be at least 6 characters."); return; }
 
         signupPanel.SetActive(false);
-        errorPanel.SetActive(false);
+        errorPanel.TurnOff();
         splashAndLoading.SetActive(true);
         mainSplashPanel.SetActive(true);
         ResetPlayFabState();
@@ -320,7 +402,7 @@ public class PlayFabManager : MonoBehaviour
             {
                 string displayName = profileResult.PlayerProfile?.DisplayName;
                 if (string.IsNullOrEmpty(displayName))
-                    setNamePanel.SetActive(true);
+                    setNamePanel.TurnOn();
                 else
                     SetTextArray(displayNameTexts, displayName);
 
@@ -334,18 +416,22 @@ public class PlayFabManager : MonoBehaviour
             });
     }
 
+
+
     // ─────────────────────────────────────────────────────────────
     //  Fetch Player Data (all stat keys in one call)
     // ─────────────────────────────────────────────────────────────
 
     private void FetchPlayerStats()
     {
+        FetchProfileImage();
+
         var keys = new List<string>
         {
             KEY_LEVEL, KEY_XP, KEY_WIN,
             KEY_WIN_COINS, KEY_GAME_PTS, KEY_WIN_GP,
             KEY_GAMES_PLAYED, KEY_GAMES_WON,
-            KEY_TOURN_PLAYED, KEY_TOURN_WON
+            KEY_TOURN_PLAYED, KEY_TOURN_WON, KEY_TOTAL_TROPHY
         };
 
         PlayFabClientAPI.GetUserData(
@@ -396,6 +482,14 @@ public class PlayFabManager : MonoBehaviour
                 if (data.ContainsKey(KEY_TOURN_WON))
                     int.TryParse(data[KEY_TOURN_WON].Value, out _totalTournWon);
                 else { _totalTournWon = 0; anyMissing = true; }
+
+                if (data.ContainsKey(KEY_TOTAL_TROPHY))
+                    int.TryParse(data[KEY_TOTAL_TROPHY].Value, out _totalTrophy);
+                else
+                {
+                    _totalTrophy = 0;
+                    anyMissing = true;
+                }
 
                 // If any key was missing, push defaults to server immediately
                 if (anyMissing)
@@ -451,7 +545,7 @@ public class PlayFabManager : MonoBehaviour
             result =>
             {
                 SetTextArray(displayNameTexts, result.DisplayName);
-                setNamePanel.SetActive(false);
+                setNamePanel.TurnOff();
             },
             error =>
             {
@@ -628,6 +722,7 @@ public class PlayFabManager : MonoBehaviour
             { KEY_GAMES_WON,    _totalGamesWon.ToString()     },
             { KEY_TOURN_PLAYED, _totalTournPlayed.ToString()  },
             { KEY_TOURN_WON,    _totalTournWon.ToString()     },
+            { KEY_TOTAL_TROPHY, _totalTrophy.ToString()       }
         };
 
         PlayFabClientAPI.UpdateUserData(
@@ -652,6 +747,9 @@ public class PlayFabManager : MonoBehaviour
         SetTextArray(totalGamesWonTexts, _totalGamesWon.ToString());
         SetTextArray(totalTournamentsPlayedTexts, _totalTournPlayed.ToString());
         SetTextArray(totalTournamentsWonTexts, _totalTournWon.ToString());
+        SetTextArray(totalTrophyTexts, _totalTrophy.ToString());
+
+        
     }
 
     private void SetTextArray(TMP_Text[] targets, string value)
@@ -720,13 +818,13 @@ public class PlayFabManager : MonoBehaviour
 
     private void ShowError(string message)
     {
-        errorPanel.SetActive(true);
+        errorPanel.TurnOn();
         errorTitle.text = message;
     }
 
     private void ShowInlineError(string message)
     {
-        errorPanel.SetActive(true);
+        errorPanel.TurnOn();
         errorTitle.text = message;
     }
 
@@ -784,8 +882,8 @@ public class PlayFabManager : MonoBehaviour
         if (mainSplashPanel) mainSplashPanel.SetActive(false);
         if (signupPanel) signupPanel.SetActive(false);
         if (mainMenuPanel) mainMenuPanel.SetActive(false);
-        if (errorPanel) errorPanel.SetActive(false);
-        if (setNamePanel) setNamePanel.SetActive(false);
+        if (errorPanel) errorPanel.TurnOff();
+        if (setNamePanel) setNamePanel.TurnOff();
     }
 
     private void CheckInternetConnection()
@@ -803,8 +901,318 @@ public class PlayFabManager : MonoBehaviour
 
     public void RetryConnection()
     {
-        errorPanel.SetActive(false);
+        errorPanel.TurnOn();
         ResetPlayFabState();
         StartCoroutine(InitialLoadingFlow());
     }
+
+    public void TurnOnSignUpPanel()
+    {
+        // If login is currently active
+        if (loginPanel.activeSelf)
+        {
+            middlePanelForLogin.transform
+                .DOScale(Vector3.zero, 0.2f)
+                .SetEase(Ease.InBack)
+                .OnComplete(() =>
+                {
+                    loginPanel.SetActive(false);
+
+                    signupPanel.SetActive(true);
+
+                    middlePanelForSignUp.transform.localScale = Vector3.zero;
+
+                    middlePanelForSignUp.transform
+                        .DOScale(Vector3.one, 0.35f)
+                        .SetEase(Ease.OutBack);
+                });
+        }
+        else
+        {
+            signupPanel.SetActive(true);
+
+            middlePanelForSignUp.transform.localScale = Vector3.zero;
+
+            middlePanelForSignUp.transform
+                .DOScale(Vector3.one, 0.35f)
+                .SetEase(Ease.OutBack);
+        }
+    }
+
+    public void TurnOnLoginPanel()
+    {
+        // If signup is currently active
+        if (signupPanel.activeSelf)
+        {
+            middlePanelForSignUp.transform
+                .DOScale(Vector3.zero, 0.2f)
+                .SetEase(Ease.InBack)
+                .OnComplete(() =>
+                {
+                    signupPanel.SetActive(false);
+
+                    loginPanel.SetActive(true);
+
+                    middlePanelForLogin.transform.localScale = Vector3.zero;
+
+                    middlePanelForLogin.transform
+                        .DOScale(Vector3.one, 0.35f)
+                        .SetEase(Ease.OutBack);
+                });
+        }
+        else
+        {
+            loginPanel.SetActive(true);
+
+            middlePanelForLogin.transform.localScale = Vector3.zero;
+
+            middlePanelForLogin.transform
+                .DOScale(Vector3.one, 0.35f)
+                .SetEase(Ease.OutBack);
+        }
+    }
+
+
+    public void AddTrophy(int amount)
+    {
+        _totalTrophy += Mathf.Abs(amount);
+        RefreshAllStatTexts();
+    }
+
+    public void RemoveTrophy(int amount)
+    {
+        _totalTrophy = Mathf.Max(0, _totalTrophy - Mathf.Abs(amount));
+        RefreshAllStatTexts();
+    }
+
+    public void UpdateTrophyLeaderboard()
+    {
+        PlayFabClientAPI.UpdatePlayerStatistics(
+            new UpdatePlayerStatisticsRequest
+            {
+                Statistics = new List<StatisticUpdate>()
+                {
+                new StatisticUpdate
+                {
+                    StatisticName = "Trophy",
+                    Value = _totalTrophy
+                }
+                }
+            },
+            result =>
+            {
+                Debug.Log("Trophy Leaderboard Updated");
+            },
+            error =>
+            {
+                Debug.LogError(error.GenerateErrorReport());
+            });
+    }
+
+    public void ClearLeaderboard()
+    {
+        foreach (Transform child in leaderboardContent)
+        {
+            Destroy(child.gameObject);
+        }
+
+        leaderboardContent.sizeDelta =
+            new Vector2(
+                leaderboardContent.sizeDelta.x,
+                0);
+    }
+
+    public void ShowLeaderboard()
+    {
+        leaderboardPanel.SetActive(true);
+
+        ClearLeaderboard();
+
+        GetMyLeaderboardPosition();
+    }
+
+
+    private void GetMyLeaderboardPosition()
+    {
+        PlayFabClientAPI.GetLeaderboardAroundPlayer(
+            new GetLeaderboardAroundPlayerRequest
+            {
+                StatisticName = "Trophy",
+                MaxResultsCount = 1
+            },
+            result =>
+            {
+                if (result.Leaderboard.Count > 0)
+                {
+                    SpawnMyCard(result.Leaderboard[0]);
+                }
+
+                LoadTopLeaderboard();
+            },
+            error =>
+            {
+                Debug.LogError(error.GenerateErrorReport());
+            });
+    }
+
+    private void SpawnMyCard(PlayerLeaderboardEntry entry)
+    {
+        GameObject obj =
+            Instantiate(
+                myLeaderboardCardPrefab,
+                leaderboardContent);
+
+        LeaderboardCard card =
+            obj.GetComponent<LeaderboardCard>();
+
+        card.Setup(
+            entry.Position + 1,
+            0,
+            entry.DisplayName,
+            entry.StatValue);
+
+        IncreaseLeaderboardHeight();
+    }
+
+    private void LoadTopLeaderboard()
+    {
+        PlayFabClientAPI.GetLeaderboard(
+            new GetLeaderboardRequest
+            {
+                StatisticName = "Trophy",
+                StartPosition = 0,
+                MaxResultsCount = 100
+            },
+            result =>
+            {
+                foreach (var player in result.Leaderboard)
+                {
+                    SpawnLeaderboardPlayer(player);
+                }
+            },
+            error =>
+            {
+                Debug.LogError(error.GenerateErrorReport());
+            });
+    }
+
+    private void SpawnLeaderboardPlayer(
+    PlayerLeaderboardEntry entry)
+    {
+        GameObject obj =
+            Instantiate(
+                otherLeaderboardCardPrefab,
+                leaderboardContent);
+
+        LeaderboardCard card =
+            obj.GetComponent<LeaderboardCard>();
+
+        card.Setup(
+            entry.Position + 1,
+            0,
+            entry.DisplayName,
+            entry.StatValue);
+
+        IncreaseLeaderboardHeight();
+    }
+
+    private void IncreaseLeaderboardHeight()
+    {
+        leaderboardContent.sizeDelta =
+            new Vector2(
+                leaderboardContent.sizeDelta.x,
+                leaderboardContent.sizeDelta.y + 33f);
+    }
+
+    //turn off the leaderboard panel
+    public void CloseLeaderboard()
+    {
+        ClearLeaderboard();
+        leaderboardPanel.SetActive(false);
+    }
+
+    //Demo function to set random trophy value for testing leaderboard
+    public void SetRandomTrophyValue()
+    {
+        int randomTrophy = UnityEngine.Random.Range(0, 1000);
+        _totalTrophy = randomTrophy;
+        RefreshAllStatTexts();
+        UpdateTrophyLeaderboard();
+    }
+
+    public void OnSelectProfileImage()
+    {
+        NativeGallery.GetImageFromGallery((path) => {
+            if (path != null)
+            {
+                byte[] imageBytes = System.IO.File.ReadAllBytes(path);
+                StartCoroutine(UploadToCloudinary(imageBytes));
+            }
+        }, "Select a profile picture", "image/*");
+    }
+
+    IEnumerator UploadToCloudinary(byte[] imageBytes)
+    {
+        WWWForm form = new WWWForm();
+        form.AddBinaryData("file", imageBytes, "profile.png", "image/png");
+        form.AddField("upload_preset", "unity_unsigned_upload"); // your preset
+        string url = "https://api.cloudinary.com/v1_1/deul32vgn/image/upload"; // Root = Cloud Name
+
+        UnityWebRequest www = UnityWebRequest.Post(url, form);
+        yield return www.SendWebRequest();
+
+        if (www.result == UnityWebRequest.Result.Success)
+        {
+            var response = JsonUtility.FromJson<CloudinaryResponse>(www.downloadHandler.text);
+            SaveImageUrlToPlayFab(response.secure_url);
+        }
+        else
+        {
+            ShowInlineError("Upload failed: " + www.error);
+        }
+    }
+
+    private void SaveImageUrlToPlayFab(string url)
+    {
+        var request = new UpdateUserDataRequest
+        {
+            Data = new Dictionary<string, string> { { "ProfileImageUrl", url } }
+        };
+        PlayFabClientAPI.UpdateUserData(request,
+            result => FetchProfileImage(),
+            error => ShowInlineError("Couldn't save image URL: " + error.ErrorMessage));
+    }
+
+    private void FetchProfileImage()
+    {
+        PlayFabClientAPI.GetUserData(new GetUserDataRequest
+        {
+            Keys = new List<string> { "ProfileImageUrl" }
+        }, result => {
+            if (result.Data.ContainsKey("ProfileImageUrl"))
+            {
+                string url = result.Data["ProfileImageUrl"].Value;
+                StartCoroutine(LoadImage(url));
+            }
+        }, error => Debug.LogError(error.GenerateErrorReport()));
+    }
+
+    IEnumerator LoadImage(string url)
+    {
+        UnityWebRequest www = UnityWebRequestTexture.GetTexture(url);
+        yield return www.SendWebRequest();
+        if (www.result == UnityWebRequest.Result.Success)
+        {
+            //load the texture and set it to the all profile images components
+            Texture2D texture = DownloadHandlerTexture.GetContent(www);
+            Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+            foreach (var img in profileImages)
+            {
+                img.sprite = sprite;
+            }
+
+        }
+    }
+
+
 }
