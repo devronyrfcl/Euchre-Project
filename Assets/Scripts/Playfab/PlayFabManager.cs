@@ -43,6 +43,9 @@ public class PlayFabManager : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
     //  Inspector References
     // ─────────────────────────────────────────────────────────────
+    
+    [SerializeField] TMP_InputField roomCodeInput;
+    public GameObject teamSelectionPanel;
 
     [Header("=== ROOT PANELS ===")]
     [SerializeField] private GameObject splashAndLoading;
@@ -449,41 +452,46 @@ public class PlayFabManager : MonoBehaviour
         };
 
         PlayFabClientAPI.GetUserData(
-            new GetUserDataRequest { Keys = keys },
+            new GetUserDataRequest
+            {
+                Keys = keys
+            },
             result =>
             {
-                var data = result.Data;
-                bool anyMissing = false;
+                var data = result.Data ?? new Dictionary<string, UserDataRecord>();
 
-                // ── Core progression ──────────────────────────────
                 if (data.ContainsKey(KEY_PLAYER_STATS))
                 {
                     string json = data[KEY_PLAYER_STATS].Value;
 
-                    PlayerStatsData stats =
-                        JsonUtility.FromJson<PlayerStatsData>(json);
-
-                    if (stats != null)
+                    if (!string.IsNullOrEmpty(json))
                     {
-                        _playerLevel = stats.playerLevel;
-                        _playerXP = stats.playerXP;
-                        _playerWin = stats.playerWin;
+                        PlayerStatsData stats =
+                            JsonUtility.FromJson<PlayerStatsData>(json);
 
-                        _totalWinCoins = stats.totalWinCoins;
-                        _totalGamePoints = stats.totalGamePoints;
-                        _totalWinGP = stats.totalWinGP;
+                        if (stats != null)
+                        {
+                            _playerLevel = stats.playerLevel;
+                            _playerXP = stats.playerXP;
+                            _playerWin = stats.playerWin;
 
-                        _totalGamesPlayed = stats.totalGamesPlayed;
-                        _totalGamesWon = stats.totalGamesWon;
+                            _totalWinCoins = stats.totalWinCoins;
+                            _totalGamePoints = stats.totalGamePoints;
+                            _totalWinGP = stats.totalWinGP;
 
-                        _totalTournPlayed = stats.totalTournPlayed;
-                        _totalTournWon = stats.totalTournWon;
+                            _totalGamesPlayed = stats.totalGamesPlayed;
+                            _totalGamesWon = stats.totalGamesWon;
 
-                        _totalTrophy = stats.totalTrophy;
+                            _totalTournPlayed = stats.totalTournPlayed;
+                            _totalTournWon = stats.totalTournWon;
+
+                            _totalTrophy = stats.totalTrophy;
+                        }
                     }
                 }
                 else
                 {
+                    // First time player defaults
                     _playerLevel = 1;
                     _playerXP = 0;
                     _playerWin = 0;
@@ -502,18 +510,53 @@ public class PlayFabManager : MonoBehaviour
 
                     SaveStatsToServer();
                 }
+
+                // Load account info
+                _playerEmail = PlayerPrefs.GetString(CACHED_EMAIL_KEY, "N/A");
+
+                SetTextArray(emailTexts, _playerEmail);
+
+                // Refresh stats UI
+                RefreshAllStatTexts();
+
+                // Fetch currencies
+                FetchCurrencies();
+
+                // Optional: If you still want PlayFab to provide the ID
+                LoadAccountInfo();
             },
             error =>
             {
-                Debug.LogError("[PlayFabManager] GetUserData: " + error.GenerateErrorReport());
-                // Use defaults, push them, still show UI
-                SaveStatsToServer();
-                LoadAccountInfo();
+                Debug.LogError("[PlayFabManager] GetUserData Error:\n" +
+                               error.GenerateErrorReport());
+
+                // Safe fallback values
+                _playerLevel = 1;
+                _playerXP = 0;
+                _playerWin = 0;
+
+                _totalWinCoins = 0;
+                _totalGamePoints = 0;
+                _totalWinGP = 0;
+
+                _totalGamesPlayed = 0;
+                _totalGamesWon = 0;
+
+                _totalTournPlayed = 0;
+                _totalTournWon = 0;
+
+                _totalTrophy = 0;
+
+                _playerEmail = PlayerPrefs.GetString(CACHED_EMAIL_KEY, "N/A");
+
+                SetTextArray(emailTexts, _playerEmail);
+
                 RefreshAllStatTexts();
                 FetchCurrencies();
+
+                // Still try to get PlayFab ID
+                LoadAccountInfo();
             });
-        
-        
     }
     
     private void LoadAccountInfo()
@@ -1273,6 +1316,58 @@ public class PlayFabManager : MonoBehaviour
 
         }
     }
+    
+    public void PublicMatch()
+    {
+        MatchmakingData.Instance.PlayerName =
+            string.IsNullOrEmpty(displayNameTexts[0].text)
+                ? "Anonymous"
+                : displayNameTexts[0].text;
+
+        MatchmakingData.Instance.IsPrivateMatch = false;
+
+        UnityEngine.SceneManagement.SceneManager.LoadScene("EuchreGame");
+    }
+    
+    public void ProceedPrivateRoom()
+    {
+        string roomCode = roomCodeInput.text.Trim();
+
+        if (string.IsNullOrEmpty(roomCode))
+        {
+            ShowInlineError("Enter room code.");
+            return;
+        }
+
+        MatchmakingData.Instance.RoomCode = roomCode;
+        MatchmakingData.Instance.IsPrivateMatch = true;
+
+        teamSelectionPanel.SetActive(true);
+    }
+    
+    private void StartPrivateGame(int teamIndex)
+    {
+        MatchmakingData.Instance.PlayerName =
+            string.IsNullOrEmpty(displayNameTexts[0].text)
+                ? "Anonymous"
+                : displayNameTexts[0].text;
+
+        MatchmakingData.Instance.TeamIndex = teamIndex;
+
+        UnityEngine.SceneManagement.SceneManager.LoadScene("EuchreGame");
+    }
+    
+    public void SelectTeam1()
+    {
+        StartPrivateGame(0);
+    }
+
+    public void SelectTeam2()
+    {
+        StartPrivateGame(1);
+    }
+    
+    
 
 
 }
