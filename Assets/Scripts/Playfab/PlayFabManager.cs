@@ -96,6 +96,9 @@ public class PlayFabManager : MonoBehaviour
     [SerializeField] private TMP_Text[] emailTexts;
     [SerializeField] private TMP_Text[] playFabIdTexts;
 
+    [Header("=== XP FILL IMAGE ===")]
+    [SerializeField] private Image xpFillImage;
+
     [Header("=== LOGIN / SIGNUP PANELS ===")]
     [SerializeField] private GameObject middlePanelForLogin;
     [SerializeField] private GameObject middlePanelForSignUp;
@@ -178,6 +181,23 @@ public class PlayFabManager : MonoBehaviour
 
     [System.Serializable]
     public class CloudinaryResponse { public string secure_url; }
+
+    [Header("=== FRIEND PANEL ===")]
+    [SerializeField] private GameObject friendPanel;
+    [SerializeField] private TMP_InputField searchInput;
+    [SerializeField] private RectTransform scrollContent;
+
+    [Header("=== PREFABS ===")]
+    [SerializeField] private GameObject friendCardPrefab;
+
+    // Cached friend ID list fetched from PlayFab
+    private List<string> _friendIds = new List<string>();
+
+    [Header("=== OTHER PLAYER PANEL ===")]
+    [SerializeField] private OtherPlayerInfoPanel otherPlayerInfoPanel;
+
+    [Header("=== DEFAULT PROFILE IMAGE ===")]
+    [SerializeField] private Sprite defaultProfileSprite;
 
     private void Start()
     {
@@ -822,6 +842,7 @@ public class PlayFabManager : MonoBehaviour
             error =>
             {
                 Debug.LogError("[PlayFabManager] SaveStats error: " + error.GenerateErrorReport());
+                ShowError("Failed to save stats to server. Please check your connection.");
             });
     }
 
@@ -842,9 +863,22 @@ public class PlayFabManager : MonoBehaviour
         SetTextArray(totalTournamentsPlayedTexts, _totalTournPlayed.ToString());
         SetTextArray(totalTournamentsWonTexts, _totalTournWon.ToString());
         SetTextArray(totalTrophyTexts, _totalTrophy.ToString());
-        
 
-        
+
+        RefreshXPFill();
+    }
+    private void RefreshXPFill()
+    {
+        if (xpFillImage == null) return;
+
+        // XP range for current level
+        int xpMin = LevelThresholds[_playerLevel - 1];
+        int xpMax = _playerLevel < LevelThresholds.Length
+            ? LevelThresholds[_playerLevel]
+            : LevelThresholds[LevelThresholds.Length - 1]; // max level cap
+
+        float fill = Mathf.InverseLerp(xpMin, xpMax, _playerXP);
+        xpFillImage.fillAmount = fill;
     }
 
     private void SetTextArray(TMP_Text[] targets, string value)
@@ -875,6 +909,7 @@ public class PlayFabManager : MonoBehaviour
             error =>
             {
                 Debug.LogError("[PlayFabManager] Register error: " + error.GenerateErrorReport());
+                ShowError(FriendlyError(error));
                 if (error.Error == PlayFabErrorCode.EmailAddressNotAvailable ||
                     error.Error == PlayFabErrorCode.UsernameNotAvailable)
                 {
@@ -904,6 +939,7 @@ public class PlayFabManager : MonoBehaviour
             error =>
             {
                 Debug.LogError("[PlayFabManager] Login error: " + error.GenerateErrorReport());
+                ShowError(FriendlyError(error));
                 _playfabFailed = true;
                 _playfabError = FriendlyError(error);
             });
@@ -1103,6 +1139,7 @@ public class PlayFabManager : MonoBehaviour
             error =>
             {
                 Debug.LogError(error.GenerateErrorReport());
+                ShowError("Failed to update trophy leaderboard. Please check your connection.");
             });
     }
 
@@ -1129,7 +1166,7 @@ public class PlayFabManager : MonoBehaviour
     }
 
 
-    private void GetMyLeaderboardPosition()
+    public void GetMyLeaderboardPosition()
     {
         PlayFabClientAPI.GetLeaderboardAroundPlayer(
             new GetLeaderboardAroundPlayerRequest
@@ -1152,24 +1189,7 @@ public class PlayFabManager : MonoBehaviour
             });
     }
 
-    private void SpawnMyCard(PlayerLeaderboardEntry entry)
-    {
-        GameObject obj =
-            Instantiate(
-                myLeaderboardCardPrefab,
-                leaderboardContent);
-
-        LeaderboardCard card =
-            obj.GetComponent<LeaderboardCard>();
-
-        card.Setup(
-            entry.Position + 1,
-            0,
-            entry.DisplayName,
-            entry.StatValue);
-
-        IncreaseLeaderboardHeight();
-    }
+    
 
     private void LoadTopLeaderboard()
     {
@@ -1193,25 +1213,7 @@ public class PlayFabManager : MonoBehaviour
             });
     }
 
-    private void SpawnLeaderboardPlayer(
-    PlayerLeaderboardEntry entry)
-    {
-        GameObject obj =
-            Instantiate(
-                otherLeaderboardCardPrefab,
-                leaderboardContent);
-
-        LeaderboardCard card =
-            obj.GetComponent<LeaderboardCard>();
-
-        card.Setup(
-            entry.Position + 1,
-            0,
-            entry.DisplayName,
-            entry.StatValue);
-
-        IncreaseLeaderboardHeight();
-    }
+    
 
     private void IncreaseLeaderboardHeight()
     {
@@ -1226,6 +1228,99 @@ public class PlayFabManager : MonoBehaviour
     {
         ClearLeaderboard();
         leaderboardPanel.SetActive(false);
+    }
+
+    private void SpawnMyCard(PlayerLeaderboardEntry entry)
+    {
+        FetchAvatarThenSpawnCard(entry, isMe: true);
+    }
+
+    private void SpawnLeaderboardPlayer(PlayerLeaderboardEntry entry)
+    {
+        FetchAvatarThenSpawnCard(entry, isMe: false);
+    }
+
+    private void FetchAvatarThenSpawnCard(PlayerLeaderboardEntry entry, bool isMe)
+    {
+        PlayFabClientAPI.GetPlayerProfile(
+            new GetPlayerProfileRequest
+            {
+                PlayFabId = entry.PlayFabId,
+                ProfileConstraints = new PlayerProfileViewConstraints
+                {
+                    ShowAvatarUrl = true
+                }
+            },
+            result =>
+            {
+                string avatarUrl = result.PlayerProfile?.AvatarUrl;
+                InstantiateLeaderboardCard(entry, isMe, avatarUrl);
+            },
+            error =>
+            {
+                InstantiateLeaderboardCard(entry, isMe, null);
+            });
+    }
+
+    private void InstantiateLeaderboardCard(PlayerLeaderboardEntry entry, bool isMe, string avatarUrl)
+    {
+        GameObject prefab = isMe ? myLeaderboardCardPrefab : otherLeaderboardCardPrefab;
+        GameObject obj = Instantiate(prefab, leaderboardContent);
+        LeaderboardCard card = obj.GetComponent<LeaderboardCard>();
+        card.Setup(entry.Position + 1, 0, entry.DisplayName, entry.StatValue, avatarUrl, entry.PlayFabId, this);
+        IncreaseLeaderboardHeight();
+    }
+
+
+    public void ShowFriendLeaderboard()
+    {
+        leaderboardPanel.SetActive(true);
+        ClearLeaderboard();
+
+        // Step 1: get my position among friends first
+        GetMyFriendLeaderboardPosition();
+    }
+
+    private void GetMyFriendLeaderboardPosition()
+    {
+        PlayFabClientAPI.GetFriendLeaderboardAroundPlayer(
+            new GetFriendLeaderboardAroundPlayerRequest
+            {
+                StatisticName = "Trophy",
+                MaxResultsCount = 1
+            },
+            result =>
+            {
+                if (result.Leaderboard.Count > 0)
+                    SpawnMyCard(result.Leaderboard[0]); // reuses your existing SpawnMyCard
+
+                LoadFriendLeaderboard();
+            },
+            error =>
+            {
+                Debug.LogError("[PlayFabManager] GetFriendLeaderboardAroundPlayer: " + error.GenerateErrorReport());
+                LoadFriendLeaderboard(); // still proceed
+            });
+    }
+
+    private void LoadFriendLeaderboard()
+    {
+        PlayFabClientAPI.GetFriendLeaderboard(
+            new GetFriendLeaderboardRequest
+            {
+                StatisticName = "Trophy",
+                StartPosition = 0,
+                MaxResultsCount = 100
+            },
+            result =>
+            {
+                foreach (var player in result.Leaderboard)
+                    SpawnLeaderboardPlayer(player); // reuses your existing SpawnLeaderboardPlayer
+            },
+            error =>
+            {
+                Debug.LogError("[PlayFabManager] GetFriendLeaderboard: " + error.GenerateErrorReport());
+            });
     }
 
     //Demo function to set random trophy value for testing leaderboard
@@ -1250,10 +1345,21 @@ public class PlayFabManager : MonoBehaviour
 
     IEnumerator UploadToCloudinary(byte[] imageBytes)
     {
+        // ── Compress to 512×512 before uploading ──
+        Texture2D original = new Texture2D(2, 2);
+        original.LoadImage(imageBytes);
+
+        // Scale down to 512×512
+        Texture2D resized = ResizeTexture(original, 128, 128);
+        byte[] compressedBytes = resized.EncodeToJPG(75); // 75% quality JPEG
+
+        Destroy(original);
+        Destroy(resized);
+
         WWWForm form = new WWWForm();
-        form.AddBinaryData("file", imageBytes, "profile.png", "image/png");
-        form.AddField("upload_preset", "unity_unsigned_upload"); // your preset
-        string url = "https://api.cloudinary.com/v1_1/deul32vgn/image/upload"; // Root = Cloud Name
+        form.AddBinaryData("file", compressedBytes, "profile.jpg", "image/jpeg");
+        form.AddField("upload_preset", "unity_unsigned_upload");
+        string url = "https://api.cloudinary.com/v1_1/deul32vgn/image/upload";
 
         UnityWebRequest www = UnityWebRequest.Post(url, form);
         yield return www.SendWebRequest();
@@ -1262,7 +1368,6 @@ public class PlayFabManager : MonoBehaviour
         {
             var response = JsonUtility.FromJson<CloudinaryResponse>(www.downloadHandler.text);
             SaveImageUrlToPlayFab(response.secure_url);
-            
             ShowInlineError("Profile picture updated successfully.");
         }
         else
@@ -1271,52 +1376,87 @@ public class PlayFabManager : MonoBehaviour
         }
     }
 
-    private void SaveImageUrlToPlayFab(string url)
+
+
+    private Texture2D ResizeTexture(Texture2D source, int width, int height)
     {
-        var request = new UpdateUserDataRequest
-        {
-            Data = new Dictionary<string, string> { { "ProfileImageUrl", url } }
-        };
-        PlayFabClientAPI.UpdateUserData(request,
-            result => FetchProfileImage(),
-            error => ShowInlineError("Couldn't save image URL: " + error.ErrorMessage));
+        RenderTexture rt = RenderTexture.GetTemporary(width, height);
+        RenderTexture.active = rt;
+        Graphics.Blit(source, rt);
+        Texture2D result = new Texture2D(width, height, TextureFormat.RGB24, false);
+        result.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+        result.Apply();
+        RenderTexture.active = null;
+        RenderTexture.ReleaseTemporary(rt);
+        return result;
     }
 
+    private void SaveImageUrlToPlayFab(string url)
+    {
+        PlayFabClientAPI.UpdateAvatarUrl(
+            new UpdateAvatarUrlRequest { ImageUrl = url },
+            result =>
+            {
+                Debug.Log("[PlayFabManager] Avatar URL saved.");
+                FetchProfileImage();
+            },
+            error => ShowInlineError("Couldn't save avatar URL: " + error.ErrorMessage));
+    }
+
+    // Load from PlayFab Avatar URL (not UserData)
     private void FetchProfileImage()
     {
-        PlayFabClientAPI.GetUserData(new GetUserDataRequest
-        {
-            Keys = new List<string> { "ProfileImageUrl" }
-        }, result => {
-            if (result.Data.ContainsKey("ProfileImageUrl"))
+        PlayFabClientAPI.GetPlayerProfile(
+            new GetPlayerProfileRequest
             {
-                string url = result.Data["ProfileImageUrl"].Value;
-                StartCoroutine(LoadImage(url));
-            }
-        }, error => Debug.LogError(error.GenerateErrorReport()));
+                ProfileConstraints = new PlayerProfileViewConstraints
+                {
+                    ShowAvatarUrl = true
+                }
+            },
+            result =>
+            {
+                string avatarUrl = result.PlayerProfile?.AvatarUrl;
+                if (!string.IsNullOrEmpty(avatarUrl))
+                    StartCoroutine(LoadImage(avatarUrl));
+                else
+                {
+                    // No URL — apply default immediately
+                    foreach (var img in profileImages)
+                        if (img != null) img.sprite = defaultProfileSprite;
+                }
+            },
+            error =>
+            {
+                Debug.LogError("[PlayFabManager] FetchProfileImage: " + error.GenerateErrorReport());
+                foreach (var img in profileImages)
+                    if (img != null) img.sprite = defaultProfileSprite;
+            });
     }
 
     IEnumerator LoadImage(string url)
     {
         UnityWebRequest www = UnityWebRequestTexture.GetTexture(url);
         yield return www.SendWebRequest();
+
         if (www.result == UnityWebRequest.Result.Success)
         {
-            //load the texture and set it to the all profile images components
             Texture2D texture = DownloadHandlerTexture.GetContent(www);
-            Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+            Sprite sprite = Sprite.Create(texture,
+                new Rect(0, 0, texture.width, texture.height),
+                new Vector2(0.5f, 0.5f));
+
             foreach (var img in profileImages)
-            {
-                if (img != null)
-                    img.sprite = sprite;
-            }
-
-            // Success message
-            
-
+                if (img != null) img.sprite = sprite;
+        }
+        else
+        {
+            // Load default
+            foreach (var img in profileImages)
+                if (img != null) img.sprite = defaultProfileSprite;
         }
     }
-    
+
     public void PublicMatch()
     {
         MatchmakingData.Instance.PlayerName =
@@ -1366,8 +1506,299 @@ public class PlayFabManager : MonoBehaviour
     {
         StartPrivateGame(1);
     }
-    
+
+    public void OpenFriendPanel()
+    {
+        friendPanel.SetActive(true);
+        RefreshFriendIds(onDone: null); // pre-load friend list silently
+    }
+
+    public void CloseFriendPanel()
+    {
+        friendPanel.SetActive(false);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  SEARCH — hook to your Search button's onClick
+    // ─────────────────────────────────────────────────────────────
+    public void OnSearchButtonPressed()
+    {
+        string query = searchInput.text.Trim();
+        if (string.IsNullOrEmpty(query)) return;
+
+        ClearContent();
+
+        // PlayFab lets you look up by DisplayName, Email, or PlayFabId
+        var request = new GetAccountInfoRequest
+        {
+            // Try all three — PlayFab will use whichever is non-null
+            // but only one should be set at a time ideally.
+            // We detect which one the user typed:
+        };
+
+        if (query.Contains("@"))          // looks like an email
+            request.Email = query;
+        else if (query.Length == 16 &&    // PlayFab IDs are 16-char hex
+                 System.Text.RegularExpressions.Regex.IsMatch(query, @"^[0-9A-Fa-f]+$"))
+            request.PlayFabId = query;
+        else
+            request.TitleDisplayName = query; // display name
+
+        PlayFabClientAPI.GetAccountInfo(request,
+            result =>
+            {
+                var account = result.AccountInfo;
+                string foundId = account.PlayFabId;
+                string foundName = account.TitleInfo?.DisplayName ?? "Unknown";
+                string imageUrl = null;
+
+                // Fetch their profile image URL from their UserData
+                FetchOtherPlayerImageThenSpawn(foundId, foundName, imageUrl);
+            },
+            error =>
+            {
+                Debug.LogError("[FriendManager] Search failed: " + error.GenerateErrorReport());
+                ShowInlineError("No player found with that identifier.");
+                // Optionally show an error in your existing errorPanel here
+            });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  SHOW ALL FRIENDS — call from "My Friends" button
+    // ─────────────────────────────────────────────────────────────
     
 
+    public void ShowAllFriends()
+    {
+        ClearContent();
+
+        PlayFabClientAPI.GetFriendsList(
+            new GetFriendsListRequest
+            {
+                //IncludeSteamFriends = false,
+                //IncludeFacebookFriends = false
+            },
+            result =>
+            {
+                _friendIds.Clear();
+
+                foreach (var friend in result.Friends)
+                {
+                    _friendIds.Add(friend.FriendPlayFabId);
+                    string name = friend.TitleDisplayName ?? friend.FriendPlayFabId;
+
+                    // Same image fetch flow as search — fetches AvatarUrl then spawns
+                    FetchOtherPlayerImageThenSpawn(friend.FriendPlayFabId, name, null);
+                }
+            },
+            error =>
+            {
+                Debug.LogError("[FriendManager] GetFriendsList: " + error.GenerateErrorReport());
+                //Show error in your existing errorPanel here if desired
+                ShowError("Failed to load friends list. Please try again later.");
+            });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  ADD FRIEND
+    // ─────────────────────────────────────────────────────────────
+    public void AddFriend(string friendPlayFabId, FriendCard card)
+    {
+        PlayFabClientAPI.AddFriend(
+            new AddFriendRequest
+            {
+                FriendPlayFabId = friendPlayFabId
+            },
+            result =>
+            {
+                Debug.Log("[FriendManager] Friend added: " + friendPlayFabId);
+                if (!_friendIds.Contains(friendPlayFabId))
+                    _friendIds.Add(friendPlayFabId);
+                card.SetFriendStatus(true);
+            },
+            error =>
+            {
+                Debug.LogError("[FriendManager] AddFriend error: " + error.GenerateErrorReport());
+                ShowInlineError("Failed to add friend. Please try again.");
+            });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  REMOVE FRIEND
+    // ─────────────────────────────────────────────────────────────
+    public void RemoveFriend(string friendPlayFabId, FriendCard card)
+    {
+        PlayFabClientAPI.RemoveFriend(
+            new RemoveFriendRequest
+            {
+                FriendPlayFabId = friendPlayFabId
+            },
+            result =>
+            {
+                Debug.Log("[FriendManager] Friend removed: " + friendPlayFabId);
+                _friendIds.Remove(friendPlayFabId);
+                card.SetFriendStatus(false);
+            },
+            error =>
+            {
+                Debug.LogError("[FriendManager] RemoveFriend error: " + error.GenerateErrorReport());
+                ShowInlineError("Failed to remove friend. Please try again.");
+            });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  INTERNAL HELPERS
+    // ─────────────────────────────────────────────────────────────
+
+    // Refresh the local _friendIds cache, then call onDone
+    private void RefreshFriendIds(System.Action onDone)
+    {
+        PlayFabClientAPI.GetFriendsList(
+            new GetFriendsListRequest
+            {
+                //IncludeSteamFriends = false,
+                //IncludeFacebookFriends = false
+            },
+            result =>
+            {
+                _friendIds.Clear();
+                foreach (var f in result.Friends)
+                    _friendIds.Add(f.FriendPlayFabId);
+                onDone?.Invoke();
+            },
+            error =>
+            {
+                Debug.LogError("[FriendManager] RefreshFriendIds: " + error.GenerateErrorReport());
+                ShowError("Failed to refresh friends list. Please check your connection.");
+                onDone?.Invoke();
+            });
+    }
+
+    // Fetches the other player's ProfileImageUrl from their public UserData, then spawns the card
+    private void FetchOtherPlayerImageThenSpawn(string playFabId, string displayName, string fallbackUrl)
+    {
+        // AvatarUrl is a built-in profile field — readable for any player
+        // without needing "allow clients to read other players' data" setting
+        PlayFabClientAPI.GetPlayerProfile(
+            new GetPlayerProfileRequest
+            {
+                PlayFabId = playFabId,
+                ProfileConstraints = new PlayerProfileViewConstraints
+                {
+                    ShowAvatarUrl = true,
+                    ShowDisplayName = true
+                }
+            },
+            result =>
+            {
+                string url = result.PlayerProfile?.AvatarUrl;
+                string name = result.PlayerProfile?.DisplayName ?? displayName;
+
+                if (!string.IsNullOrEmpty(url))
+                    StartCoroutine(LoadImageThenSpawn(url, playFabId, name));
+                else
+                    SpawnCard(playFabId, name, _friendIds.Contains(playFabId), null);
+            },
+            error =>
+            {
+                Debug.LogError("[FriendManager] GetPlayerProfile: " + error.GenerateErrorReport());
+                SpawnCard(playFabId, displayName, _friendIds.Contains(playFabId), null);
+            });
+    }
+
+    private IEnumerator LoadImageThenSpawn(string url, string playFabId, string displayName)
+    {
+        Texture2D tex = null;
+
+        if (!string.IsNullOrEmpty(url))
+        {
+            UnityWebRequest www = UnityWebRequestTexture.GetTexture(url);
+            yield return www.SendWebRequest();
+
+            if (www.result == UnityWebRequest.Result.Success)
+                tex = DownloadHandlerTexture.GetContent(www);
+        }
+
+        // tex will be null if failed — FriendCard handles default internally
+        SpawnCard(playFabId, displayName, _friendIds.Contains(playFabId), tex);
+    }
+
+    private void SpawnCard(string playFabId, string displayName, bool isFriend, Texture2D tex)
+    {
+        GameObject obj = Instantiate(friendCardPrefab, scrollContent);
+        FriendCard card = obj.GetComponent<FriendCard>();
+        card.Setup(displayName, playFabId, isFriend, tex, this);
+
+        // Expand scroll content width by 100 per card (for horizontal layout)
+        scrollContent.sizeDelta = new Vector2(
+            scrollContent.sizeDelta.x + 0f,
+            scrollContent.sizeDelta.y);
+    }
+
+    private void ClearContent()
+    {
+        foreach (Transform child in scrollContent)
+            Destroy(child.gameObject);
+
+        scrollContent.sizeDelta = new Vector2(0f, scrollContent.sizeDelta.y);
+    }
+
+    public void OpenOtherPlayerProfile(string playFabId)
+    {
+        PlayFabClientAPI.ExecuteCloudScript(
+            new ExecuteCloudScriptRequest
+            {
+                FunctionName = "GetOtherPlayerProfile",
+                FunctionParameter = new { playFabId = playFabId },
+                GeneratePlayStreamEvent = false
+            },
+            result =>
+            {
+                if (result.FunctionResult == null)
+                {
+                    Debug.LogError("[PlayFabManager] CloudScript returned null.");
+                    ShowError("Failed to retrieve player profile. Please try again.");
+                    return;
+                }
+
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(result.FunctionResult);
+                Debug.Log("[PlayFabManager] CloudScript raw result: " + json);
+
+                CloudScriptGetOtherPlayerResult raw =
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<CloudScriptGetOtherPlayerResult>(json);
+
+                if (raw == null)
+                {
+                    Debug.LogError("[PlayFabManager] Failed to deserialize CloudScript result.");
+                    ShowError("Failed to retrieve player profile. Please try again.");
+                    return;
+                }
+
+                OtherPlayerData data = new OtherPlayerData
+                {
+                    displayName = raw.displayName,
+                    avatarUrl = raw.avatarUrl,
+                    playFabId = raw.playFabId,
+                    email = raw.email,
+                    stats = new OtherPlayerStats
+                    {
+                        playerLevel = raw.playerLevel,
+                        playerXP = raw.playerXP,
+                        totalGamesPlayed = raw.totalGamesPlayed,
+                        totalGamesWon = raw.totalGamesWon,
+                        totalTournPlayed = raw.totalTournPlayed,
+                        totalTournWon = raw.totalTournWon
+                    }
+                };
+
+                otherPlayerInfoPanel.Show(data);
+            },
+            error =>
+            {
+                Debug.LogError("[PlayFabManager] OpenOtherPlayerProfile: " +
+                               error.GenerateErrorReport());
+                ShowError("Failed to retrieve player profile. Please try again.");
+            });
+    }
 
 }
