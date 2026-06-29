@@ -111,6 +111,11 @@ public class PlayFabManager : MonoBehaviour
     [SerializeField] private GameObject myLeaderboardCardPrefab;
     [SerializeField] private GameObject otherLeaderboardCardPrefab;
 
+    public string CachedPlayFabId    => _playFabId;
+    public string CachedDisplayName  => _cachedDisplayName;
+    public string CachedAvatarUrl    => _cachedAvatarUrl;
+    public int    CachedPokerChips   => _cachedPC;
+
 
     // ─────────────────────────────────────────────────────────────
     //  Constants
@@ -171,6 +176,9 @@ public class PlayFabManager : MonoBehaviour
 
     private string _playFabId = "";
     private string _playerEmail = "";
+    private string _cachedAvatarUrl = "";
+    private int    _cachedPC        = 0;
+   private string _cachedDisplayName = "";
 
     // ─────────────────────────────────────────────────────────────
     //  Unity Lifecycle
@@ -616,8 +624,14 @@ public class PlayFabManager : MonoBehaviour
             new GetUserInventoryRequest(),
             result =>
             {
-                SetTextArray(gpTexts, result.VirtualCurrency.TryGetValue("GP", out int gp) ? gp.ToString() : "0");
-                SetTextArray(pcTexts, result.VirtualCurrency.TryGetValue("PC", out int pc) ? pc.ToString() : "0");
+                
+                int gp = result.VirtualCurrency.TryGetValue("GP", out int gpVal) ? gpVal : 0;
+                int pc = result.VirtualCurrency.TryGetValue("PC", out int pcVal) ? pcVal : 0;
+        
+                _cachedPC = pc;   // ← ADD THIS
+        
+                SetTextArray(gpTexts, gp.ToString());
+                SetTextArray(pcTexts, pc.ToString());
             },
             error =>
             {
@@ -1457,7 +1471,7 @@ public class PlayFabManager : MonoBehaviour
         }
     }
 
-    public void PublicMatch()
+    /*public void PublicMatch()
     {
         MatchmakingData.Instance.PlayerName =
             string.IsNullOrEmpty(displayNameTexts[0].text)
@@ -1505,7 +1519,7 @@ public class PlayFabManager : MonoBehaviour
     public void SelectTeam2()
     {
         StartPrivateGame(1);
-    }
+    }*/
 
     public void OpenFriendPanel()
     {

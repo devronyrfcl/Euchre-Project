@@ -148,7 +148,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         // Push local player identity into Photon custom properties
         // so all clients can read them from Player.CustomProperties
-        Hashtable props = new Hashtable
+        ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
         {
             { PROP_PLAYFAB_ID,   _config.localPlayer.playFabId   },
             { PROP_DISPLAY_NAME, _config.localPlayer.displayName  },
@@ -351,7 +351,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private void AssignLocalSeat(int seat)
     {
         _localSeat = seat;
-        Hashtable prop = new Hashtable { { PROP_SEAT, seat } };
+        ExitGames.Client.Photon.Hashtable prop = new ExitGames.Client.Photon.Hashtable { { PROP_SEAT, seat } };
         PhotonNetwork.LocalPlayer.SetCustomProperties(prop);
         Debug.Log($"[Network] Local seat: {seat}");
     }
