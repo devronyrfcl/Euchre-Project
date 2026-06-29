@@ -1,6 +1,3 @@
-﻿using PlayFab;
-using PlayFab.ClientModels;
-using System.Collections.Generic;
 using System.Collections.Generic;
 using PlayFab;
 using PlayFab.ClientModels;
@@ -35,9 +32,9 @@ public class GameplayPlayFabManager : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
 
     private MatchConfig _config;
-    private int _currentDealerSeat = -1;
-    private int _trumpPickerSeat = -1;
-    private char _currentTrump = ' ';
+    private int         _currentDealerSeat  = -1;
+    private int         _trumpPickerSeat     = -1;
+    private char        _currentTrump        = ' ';
 
     // PlayFab stat keys — match your existing PlayFabManager constants
     private const string KEY_PLAYER_STATS = "PlayerStats";
@@ -140,8 +137,8 @@ public class GameplayPlayFabManager : MonoBehaviour
         PlayFabClientAPI.ExecuteCloudScript(
             new ExecuteCloudScriptRequest
             {
-                FunctionName = "GetGameplayPlayerProfile",
-                FunctionParameter = new { playFabId = playFabId },
+                FunctionName        = "GetGameplayPlayerProfile",
+                FunctionParameter   = new { playFabId = playFabId },
                 GeneratePlayStreamEvent = false
             },
             result =>
@@ -215,7 +212,7 @@ public class GameplayPlayFabManager : MonoBehaviour
     public void SetTrump(int pickerSeat, char suit)
     {
         _trumpPickerSeat = pickerSeat;
-        _currentTrump = suit;
+        _currentTrump    = suit;
 
         for (int i = 0; i < playerPanels.Length; i++)
         {
@@ -230,7 +227,7 @@ public class GameplayPlayFabManager : MonoBehaviour
     public void ClearTrump()
     {
         _trumpPickerSeat = -1;
-        _currentTrump = ' ';
+        _currentTrump    = ' ';
 
         for (int i = 0; i < playerPanels.Length; i++)
         {
@@ -285,7 +282,7 @@ public class GameplayPlayFabManager : MonoBehaviour
             new SubtractUserVirtualCurrencyRequest
             {
                 VirtualCurrency = "PC",
-                Amount = betAmount
+                Amount          = betAmount
             },
             result =>
             {
@@ -320,7 +317,7 @@ public class GameplayPlayFabManager : MonoBehaviour
             new AddUserVirtualCurrencyRequest
             {
                 VirtualCurrency = "PC",
-                Amount = pot
+                Amount          = pot
             },
             result =>
             {

@@ -1,4 +1,5 @@
-﻿using System.Collections;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using ExitGames.Client.Photon;
 using Photon.Pun;
@@ -7,14 +8,18 @@ using UnityEngine;
 
 /// <summary>
 /// Full Photon PUN2 network manager for Euchre gameplay.
-/// Handles: connection, room join/create, seat assignment,
-///          dealing, trump selection, trick taking, scoring,
-///          team vote, go-alone, bot fill, match economy callbacks.
+/// Handles: connection, room join/create (public random or private by code),
+///          seat assignment (modular, first-come-first-served with slot system ready),
+///          dealing, trump phases 1 & 2, go-alone, trick taking,
+///          hand scoring, match scoring, bot fill, economy callbacks.
 ///
-/// Communicates to GameplayPlayFabManager for UI sync.
-/// Communicates to EuchreCardManager for card spawning/animation.
-/// Communicates to TrumpSelectionUI for trump popup.
-/// Communicates to TeamVoteUI for team vote popup.
+/// Seat layout (absolute):
+///   0 = local player always
+///   1 = partner  (opposite in team mode; seat+2 % 4)
+///   2 = left opponent
+///   3 = right opponent
+///
+/// Panel index = relative to local player (same mapping).
 /// </summary>
 public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 {
@@ -30,48 +35,35 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     [Header("=== MANAGERS ===")]
     [SerializeField] private GameplayPlayFabManager playFabManager;
-    [SerializeField] private EuchreCardManager cardManager;
-    [SerializeField] private TrumpSelectionUI trumpUI;
-    [SerializeField] private TeamVoteUI teamVoteUI;
-    [SerializeField] private GameOverUI gameOverUI;
+    [SerializeField] private EuchreCardManager      cardManager;
+    [SerializeField] private TrumpSelectionUI       trumpUI;
+    [SerializeField] private TeamVoteUI             teamVoteUI;
+    [SerializeField] private GameOverUI             gameOverUI;
 
-    [Header("=== STATUS TEXT ===")]
+    [Header("=== STATUS ===")]
     [SerializeField] private TMPro.TMP_Text statusText;
 
     // ─────────────────────────────────────────────────────────────
-    //  Photon Custom Property Keys
+    //  Photon Property Keys
     // ─────────────────────────────────────────────────────────────
 
-    private const string PROP_PLAYFAB_ID = "PFId";
+    // Player custom properties
+    private const string PROP_PLAYFAB_ID   = "PFId";
     private const string PROP_DISPLAY_NAME = "Name";
-    private const string PROP_AVATAR_URL = "Avt";
-    private const string PROP_POKER_CHIPS = "PC";
-    private const string PROP_SEAT = "Seat";
-    private const string PROP_IS_BOT = "Bot";
-
-    // Room properties
-    private const string ROOM_DEALER = "Dealer";
-    private const string ROOM_TRUMP = "Trump";
-    private const string ROOM_TRUMP_PICKER = "TrumpPicker";
-    private const string ROOM_TEAM_MODE = "TeamMode";
-    private const string ROOM_GAME_STATE = "State";
+    private const string PROP_AVATAR_URL   = "Avt";
+    private const string PROP_POKER_CHIPS  = "PC";
+    private const string PROP_SEAT         = "Seat";
+    private const string PROP_IS_BOT       = "Bot";
 
     // ─────────────────────────────────────────────────────────────
-    //  Game State Enum
+    //  Game State
     // ─────────────────────────────────────────────────────────────
 
     public enum GameState
     {
-        Connecting,
-        WaitingForPlayers,
-        TeamVote,
-        Dealing,
-        TrumpPhase1,
-        TrumpPhase2,
-        Playing,
-        ScoringTrick,
-        HandOver,
-        MatchOver
+        Connecting, WaitingForPlayers, TeamVote,
+        Dealing, TrumpPhase1, TrumpPhase2,
+        Playing, ScoringTrick, HandOver, MatchOver
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -79,50 +71,57 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     // ─────────────────────────────────────────────────────────────
 
     private MatchConfig _config;
+    private GameState   _state          = GameState.Connecting;
 
-    private GameState _state = GameState.Connecting;
-    private int _localSeat = 0;
-    private int _dealerSeat = 0;
-    private int _turnSeat = 0;
-    private char _trump = ' ';
-    private int _trumpPickerSeat = -1;
-    private int _cycled = 0;
-    private int _skipSeat = -1;   // go-alone: partner seat to skip
+    // Seats
+    private int         _localSeat      = 0;
+    private List<int>   _takenSeats     = new List<int>();
+    private Dictionary<int, int>    _seatToActor  = new Dictionary<int, int>();
+    private Dictionary<int, string> _seatToName   = new Dictionary<int, string>();
 
-    private bool _isTeamMode = false;
-    private int _teamVoteYes = 0;
-    private int _teamVoteNo = 0;
-    private bool _localVoteDone = false;
+    // Hand / trick state
+    private int         _dealerSeat     = 0;
+    private int         _turnSeat       = 0;
+    private char        _trump          = ' ';
+    private int         _trumpPickerSeat = -1;
+    private int         _cycled         = 0;
+    private int         _skipSeat       = -1;
 
-    private int _team1Score = 0;
-    private int _team2Score = 0;
-    private int _team1Tricks = 0;
-    private int _team2Tricks = 0;
+    // Team vote
+    private bool        _isTeamMode     = false;
+    private int         _teamVoteYes    = 0;
+    private int         _teamVoteNo     = 0;
+    private bool        _localVoteDone  = false;
 
-    private const int WIN_SCORE = 10;
+    // Scoring
+    private int         _team1Score     = 0;
+    private int         _team2Score     = 0;
+    private int         _team1Tricks    = 0;
+    private int         _team2Tricks    = 0;
+    private const int   WIN_SCORE       = 10;
 
     // Cards
-    private readonly List<string> _deck = new List<string>();
-    private readonly Dictionary<int, List<string>> _hands = new Dictionary<int, List<string>>();
-    private readonly List<string> _played = new List<string>();
+    private Dictionary<int, List<string>> _hands   = new Dictionary<int, List<string>>();
+    private List<string>                  _played  = new List<string>();
+    private List<string>                  _deck    = new List<string>();
 
-    // Seats → Photon ActorNumber map (for non-host clients)
-    private readonly Dictionary<int, int> _seatToActor = new Dictionary<int, int>();
+    // Trick turn order (built at start of each trick)
+    private List<int>   _trickOrder     = new List<int>();
 
-    // Bot
-    private readonly List<int> _botSeats = new List<int>();
-    private Coroutine _botFillCoroutine;
+    // Bots
+    private List<int>   _botSeats       = new List<int>();
+    private Coroutine   _botFillRoutine;
 
     private static readonly string[] BOT_NAMES = { "Bot Alpha", "Bot Beta", "Bot Gamma" };
 
-    private static readonly string[] TYPES = { "9", "T", "J", "Q", "K", "A" };
-    private static readonly string[] SUITS = { "D", "H", "S", "C" };
+    private static readonly string[] CARD_TYPES = { "9","T","J","Q","K","A" };
+    private static readonly string[] CARD_SUITS = { "C","D","H","S" };
 
-    private static readonly Dictionary<char, char> ALT_SUITS = new Dictionary<char, char>
-        { {'S','C'}, {'C','S'}, {'H','D'}, {'D','H'} };
+    private static readonly Dictionary<char,char> ALT_SUITS = new Dictionary<char,char>
+        { {'S','C'},{'C','S'},{'H','D'},{'D','H'} };
 
     // ─────────────────────────────────────────────────────────────
-    //  Init (called by GameplaySceneBootstrapper)
+    //  Lifecycle
     // ─────────────────────────────────────────────────────────────
 
     private void Awake()
@@ -131,6 +130,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         Instance = this;
     }
 
+    /// <summary>Called by GameplaySceneBootstrapper on Awake.</summary>
     public void Init(MatchConfig config)
     {
         _config = config;
@@ -139,14 +139,15 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  PHOTON CONNECTION CALLBACKS
+    //  PHOTON CONNECTION
     // ─────────────────────────────────────────────────────────────
 
     public override void OnConnectedToMaster()
     {
         Debug.Log("[Network] Connected to Master.");
 
-        // Set local player custom properties before joining
+        // Push local player identity into Photon custom properties
+        // so all clients can read them from Player.CustomProperties
         Hashtable props = new Hashtable
         {
             { PROP_PLAYFAB_ID,   _config.localPlayer.playFabId   },
@@ -158,7 +159,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         PhotonNetwork.LocalPlayer.SetCustomProperties(props);
 
         if (_config.matchType == "private" && !string.IsNullOrEmpty(_config.roomCode))
-            JoinPrivateRoom();
+            JoinOrCreatePrivateRoom();
         else
             JoinPublicRoom();
     }
@@ -166,14 +167,15 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     public override void OnDisconnected(DisconnectCause cause)
     {
         Debug.LogWarning($"[Network] Disconnected: {cause}");
-        SetStatus("Disconnected. Reconnecting...");
+        SetStatus("Connection lost. Reconnecting...");
         StartCoroutine(ReconnectDelay());
     }
 
     private IEnumerator ReconnectDelay()
     {
         yield return new WaitForSeconds(2f);
-        PhotonNetwork.ConnectUsingSettings();
+        if (_state != GameState.MatchOver)
+            PhotonNetwork.ConnectUsingSettings();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -185,57 +187,65 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         PhotonNetwork.JoinRandomRoom();
     }
 
-    private void JoinPrivateRoom()
+    private void JoinOrCreatePrivateRoom()
     {
-        RoomOptions opts = new RoomOptions
-        {
-            IsVisible = false,
-            MaxPlayers = 4,
-            CustomRoomPropertiesForLobby = new string[]
-                { ROOM_DEALER, ROOM_TRUMP, ROOM_TRUMP_PICKER, ROOM_TEAM_MODE, ROOM_GAME_STATE }
-        };
-
+        RoomOptions opts = BuildRoomOptions(visible: false);
         PhotonNetwork.JoinOrCreateRoom(_config.roomCode, opts, TypedLobby.Default);
     }
 
     public override void OnJoinRandomFailed(short returnCode, string message)
     {
-        // No public room available — create one
-        string id = "";
-        for (int i = 0; i < 8; i++) id += Random.Range(0, 9).ToString();
-
-        RoomOptions opts = new RoomOptions
-        {
-            IsVisible = true,
-            MaxPlayers = 4,
-            CustomRoomPropertiesForLobby = new string[]
-                { ROOM_DEALER, ROOM_TRUMP, ROOM_TRUMP_PICKER, ROOM_TEAM_MODE, ROOM_GAME_STATE }
-        };
-
+        // No public room found — create one with random ID
+        string id = GenerateRoomId();
+        RoomOptions opts = BuildRoomOptions(visible: true);
         PhotonNetwork.JoinOrCreateRoom(id, opts, TypedLobby.Default);
     }
 
+    private RoomOptions BuildRoomOptions(bool visible)
+    {
+        return new RoomOptions
+        {
+            IsVisible  = visible,
+            MaxPlayers = 4
+        };
+    }
+
+    private string GenerateRoomId()
+    {
+        string id = "";
+        for (int i = 0; i < 8; i++) id += UnityEngine.Random.Range(0, 9).ToString();
+        return id;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  ROOM EVENTS
+    // ─────────────────────────────────────────────────────────────
+
     public override void OnCreatedRoom()
     {
-        Debug.Log("[Network] Room created. I am host.");
-        AssignSeat(0); // host always seat 0
+        Debug.Log("[Network] Room created — I am host.");
+        _takenSeats.Clear();
+
+        // Host always takes seat 0
+        AssignLocalSeat(0);
+        _takenSeats.Add(0);
+        _seatToActor[0] = PhotonNetwork.LocalPlayer.ActorNumber;
 
         SetStatus("Waiting for players (1/4)...");
         SetState(GameState.WaitingForPlayers);
 
         if (_config.allowBots)
-            _botFillCoroutine = StartCoroutine(BotFillCountdown());
+            _botFillRoutine = StartCoroutine(BotFillCountdown());
     }
 
     public override void OnJoinedRoom()
     {
         if (PhotonNetwork.IsMasterClient) return; // handled in OnCreatedRoom
 
-        Debug.Log("[Network] Joined room.");
+        Debug.Log("[Network] Joined room — requesting seat.");
         SetStatus("Waiting for players...");
         SetState(GameState.WaitingForPlayers);
 
-        // Request seat assignment from host
         photonView.RPC(nameof(RPC_RequestSeat), RpcTarget.MasterClient,
             PhotonNetwork.LocalPlayer.ActorNumber,
             _config.localPlayer.playFabId,
@@ -248,15 +258,19 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         Debug.LogWarning($"[Network] Player left: {otherPlayer.NickName}");
 
-        if (_config.allowBots && _state != GameState.MatchOver)
-            FillLeftSeatWithBot(otherPlayer);
+        if (_state == GameState.MatchOver) return;
+        if (!PhotonNetwork.IsMasterClient) return;
+
+        if (_config.allowBots)
+            ReplaceWithBot(otherPlayer);
     }
 
     // ─────────────────────────────────────────────────────────────
     //  SEAT ASSIGNMENT
+    //  Modular: first-come-first-served now.
+    //  To add slot picking later, replace the seat-selection logic
+    //  in RPC_RequestSeat with a slot availability check.
     // ─────────────────────────────────────────────────────────────
-
-    private List<int> _takenSeats = new List<int> { 0 }; // 0 reserved for host
 
     [PunRPC]
     private void RPC_RequestSeat(int actorNumber, string playFabId,
@@ -264,7 +278,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         if (!PhotonNetwork.IsMasterClient) return;
 
-        // Find first free seat
+        // Find next free seat (1, 2, or 3 — 0 is host)
         int seat = -1;
         for (int i = 1; i <= 3; i++)
         {
@@ -273,84 +287,73 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         if (seat == -1)
         {
-            Debug.LogWarning("[Network] No free seats.");
+            Debug.LogWarning("[Network] Room full — ignoring seat request.");
             return;
         }
 
         _takenSeats.Add(seat);
-        _seatToActor[seat] = actorNumber;
+        _seatToActor[seat]  = actorNumber;
+        _seatToName[seat]   = displayName;
 
-        // Tell everyone about this player
-        photonView.RPC(nameof(RPC_SeatAssigned), RpcTarget.All,
+        // Announce to everyone
+        photonView.RPC(nameof(RPC_SeatConfirmed), RpcTarget.All,
             actorNumber, seat, playFabId, displayName, avatarUrl, pokerChips, false);
 
-        // If room is full, start game
-        if (_takenSeats.Count >= 4)
+        int totalSeated = _takenSeats.Count + _botSeats.Count;
+        SetStatus($"Waiting for players ({totalSeated}/4)...");
+
+        if (totalSeated >= 4)
         {
-            if (_botFillCoroutine != null) StopCoroutine(_botFillCoroutine);
-            StartTeamVoteOrGame();
-        }
-        else
-        {
-            SetStatus($"Waiting for players ({_takenSeats.Count}/4)...");
+            if (_botFillRoutine != null) StopCoroutine(_botFillRoutine);
+            photonView.RPC(nameof(RPC_StartTeamVote), RpcTarget.All);
         }
     }
 
     [PunRPC]
-    private void RPC_SeatAssigned(int actorNumber, int seat,
-                                   string playFabId, string displayName,
-                                   string avatarUrl, int pokerChips, bool isBot)
+    private void RPC_SeatConfirmed(int actorNumber, int seat,
+                                    string playFabId, string displayName,
+                                    string avatarUrl, int pokerChips, bool isBot)
     {
         _seatToActor[seat] = actorNumber;
+        _seatToName[seat]  = displayName;
 
-        bool isLocal = actorNumber == PhotonNetwork.LocalPlayer.ActorNumber;
+        bool isLocalPlayer = actorNumber == PhotonNetwork.LocalPlayer.ActorNumber;
 
-        if (isLocal)
+        if (isLocalPlayer)
         {
-            _localSeat = seat;
-            AssignSeat(seat);
+            AssignLocalSeat(seat);
+            if (!_takenSeats.Contains(seat)) _takenSeats.Add(seat);
+        }
+        else if (isBot)
+        {
+            if (!_botSeats.Contains(seat)) _botSeats.Add(seat);
+        }
+        else
+        {
+            if (!_takenSeats.Contains(seat)) _takenSeats.Add(seat);
         }
 
-        // Update PlayFab panel
-        if (seat == 0 && isLocal) return; // local already set up in PlayFabManager.Start()
+        // Update PlayFab panel for non-local players
+        if (!isLocalPlayer)
+        {
+            int panelIdx = RemapSeatToPanel(seat);
+            playFabManager.SetupOtherPlayer(
+                panelIdx, playFabId, displayName, pokerChips, avatarUrl, isBot);
+        }
 
-        // Remap seat to panel index relative to local seat
-        int panelIndex = RemapSeatToPanel(seat);
+        // Also push to PlayFab TeamVoteUI icon
+        teamVoteUI?.SetVoteIcon(RemapSeatToPanel(seat), voted: false, yes: false);
 
-        playFabManager.SetupOtherPlayer(
-            panelIndex, playFabId, displayName, pokerChips, avatarUrl, isBot);
-
-        int count = _takenSeats.Count + _botSeats.Count;
-        SetStatus($"Waiting for players ({count}/4)...");
+        int totalSeated = _takenSeats.Count + _botSeats.Count;
+        SetStatus($"Waiting for players ({totalSeated}/4)...");
     }
 
-    private void AssignSeat(int seat)
+    private void AssignLocalSeat(int seat)
     {
         _localSeat = seat;
         Hashtable prop = new Hashtable { { PROP_SEAT, seat } };
         PhotonNetwork.LocalPlayer.SetCustomProperties(prop);
-        Debug.Log($"[Network] Local seat assigned: {seat}");
-    }
-
-    /// <summary>
-    /// Remaps absolute seat to panel index relative to local player.
-    /// Local player is always panel 0.
-    /// Partner (seat+2) is panel 1.
-    /// Left opp (seat+1) is panel 2.
-    /// Right opp (seat+3) is panel 3.
-    /// </summary>
-    private int RemapSeatToPanel(int absoluteSeat)
-    {
-        if (absoluteSeat == _localSeat) return 0;
-
-        int diff = (absoluteSeat - _localSeat + 4) % 4;
-        return diff switch
-        {
-            2 => 1, // partner
-            1 => 2, // left opponent
-            3 => 3, // right opponent
-            _ => 0
-        };
+        Debug.Log($"[Network] Local seat: {seat}");
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -360,18 +363,23 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private IEnumerator BotFillCountdown()
     {
         float elapsed = 0f;
-        float wait = _config.botFillDelay;
+        float wait    = _config.botFillDelay;
 
-        while (elapsed < wait && _takenSeats.Count < 4)
+        while (elapsed < wait)
         {
             elapsed += Time.deltaTime;
+            int totalSeated = _takenSeats.Count + _botSeats.Count;
+            if (totalSeated >= 4) yield break;
+
             int remaining = Mathf.CeilToInt(wait - elapsed);
-            SetStatus($"Waiting for players ({_takenSeats.Count}/4) — {remaining}s");
+            SetStatus($"Waiting for players ({totalSeated}/4) — {remaining}s");
             yield return null;
         }
 
-        if (_takenSeats.Count < 4 && PhotonNetwork.IsMasterClient)
-            FillRemainingWithBots();
+        if (!PhotonNetwork.IsMasterClient) yield break;
+        if (_takenSeats.Count + _botSeats.Count >= 4) yield break;
+
+        FillRemainingWithBots();
     }
 
     private void FillRemainingWithBots()
@@ -379,93 +387,97 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         int botIdx = 0;
         for (int seat = 1; seat <= 3; seat++)
         {
-            if (_takenSeats.Contains(seat)) continue;
+            if (_takenSeats.Contains(seat) || _botSeats.Contains(seat)) continue;
 
             string botName = botIdx < BOT_NAMES.Length ? BOT_NAMES[botIdx] : $"Bot {botIdx + 1}";
-            int botPC = Random.Range(2000, 8001);
-            string botId = $"BOT_{seat}";
+            int    botPC   = UnityEngine.Random.Range(2000, 8001);
+            string botId   = $"BOT_SEAT_{seat}";
             botIdx++;
 
-            _takenSeats.Add(seat);
             _botSeats.Add(seat);
+            _seatToName[seat] = botName;
 
-            photonView.RPC(nameof(RPC_SeatAssigned), RpcTarget.All,
-                -seat, seat, botId, botName, "", botPC, true);
+            photonView.RPC(nameof(RPC_SeatConfirmed), RpcTarget.All,
+                -(seat + 100),  // negative actor number = bot marker
+                seat, botId, botName, "", botPC, true);
         }
 
-        StartTeamVoteOrGame();
+        if (_takenSeats.Count + _botSeats.Count >= 4)
+            photonView.RPC(nameof(RPC_StartTeamVote), RpcTarget.All);
     }
 
-    private void FillLeftSeatWithBot(Player leftPlayer)
+    private void ReplaceWithBot(Player leftPlayer)
     {
-        if (!PhotonNetwork.IsMasterClient) return;
-
         object seatObj;
         if (!leftPlayer.CustomProperties.TryGetValue(PROP_SEAT, out seatObj)) return;
 
-        int seat = (int)seatObj;
-        string botName = $"Bot {seat}";
-        int botPC = Random.Range(2000, 8001);
+        int seat    = (int)seatObj;
+        string name = $"Bot {seat}";
+        int    pc   = UnityEngine.Random.Range(2000, 8001);
 
         if (!_botSeats.Contains(seat)) _botSeats.Add(seat);
+        _takenSeats.Remove(seat);
+        _seatToName[seat] = name;
 
-        photonView.RPC(nameof(RPC_SeatAssigned), RpcTarget.All,
-            -seat, seat, $"BOT_{seat}", botName, "", botPC, true);
+        photonView.RPC(nameof(RPC_SeatConfirmed), RpcTarget.All,
+            -(seat + 100), seat, $"BOT_SEAT_{seat}", name, "", pc, true);
     }
 
     // ─────────────────────────────────────────────────────────────
     //  TEAM VOTE
     // ─────────────────────────────────────────────────────────────
 
-    private void StartTeamVoteOrGame()
-    {
-        photonView.RPC(nameof(RPC_StartTeamVote), RpcTarget.All);
-    }
-
     [PunRPC]
     private void RPC_StartTeamVote()
     {
         SetState(GameState.TeamVote);
-        _teamVoteYes = 0;
-        _teamVoteNo = 0;
+        _teamVoteYes   = 0;
+        _teamVoteNo    = 0;
         _localVoteDone = false;
 
-        if (teamVoteUI != null)
-            teamVoteUI.Show(OnTeamVoteYes, OnTeamVoteNo);
+        teamVoteUI?.Show(
+            onYes: () => { if (!_localVoteDone) { _localVoteDone = true; CastVote(true);  } },
+            onNo:  () => { if (!_localVoteDone) { _localVoteDone = true; CastVote(false); } });
     }
 
-    private void OnTeamVoteYes()
+    private void CastVote(bool yes)
     {
-        if (_localVoteDone) return;
-        _localVoteDone = true;
-        photonView.RPC(nameof(RPC_TeamVote), RpcTarget.All, true);
-    }
-
-    private void OnTeamVoteNo()
-    {
-        if (_localVoteDone) return;
-        _localVoteDone = true;
-        photonView.RPC(nameof(RPC_TeamVote), RpcTarget.All, false);
+        teamVoteUI?.SetVoteIcon(0, voted: true, yes: yes);
+        photonView.RPC(nameof(RPC_ReceiveVote), RpcTarget.All,
+            _localSeat, yes);
     }
 
     [PunRPC]
-    private void RPC_TeamVote(bool yes)
+    private void RPC_ReceiveVote(int fromSeat, bool yes)
     {
+        // Update icon for the voting player
+        teamVoteUI?.SetVoteIcon(RemapSeatToPanel(fromSeat), voted: true, yes: yes);
+
         if (yes) _teamVoteYes++;
-        else _teamVoteNo++;
+        else     _teamVoteNo++;
 
-        int totalHumans = 4 - _botSeats.Count;
-        int totalVotes = _teamVoteYes + _teamVoteNo;
+        // Bots auto-vote yes (host sends their votes)
+        int humanCount = 4 - _botSeats.Count;
+        if (_teamVoteYes + _teamVoteNo < humanCount) return;
 
-        if (totalVotes < totalHumans) return; // still waiting
+        // Add bot votes
+        if (PhotonNetwork.IsMasterClient)
+        {
+            foreach (int botSeat in _botSeats)
+            {
+                _teamVoteYes++;
+                photonView.RPC(nameof(RPC_ReceiveBotVote), RpcTarget.All, botSeat);
+            }
 
-        // Bots always vote yes (they follow whatever mode)
-        _teamVoteYes += _botSeats.Count;
+            bool teamMode = (_teamVoteNo == 0); // everyone must say yes
+            photonView.RPC(nameof(RPC_TeamVoteResult), RpcTarget.All, teamMode);
+        }
+    }
 
-        // ALL must vote yes for team mode
-        _isTeamMode = (_teamVoteYes == 4);
-
-        photonView.RPC(nameof(RPC_TeamVoteResult), RpcTarget.All, _isTeamMode);
+    [PunRPC]
+    private void RPC_ReceiveBotVote(int botSeat)
+    {
+        teamVoteUI?.SetVoteIcon(RemapSeatToPanel(botSeat), voted: true, yes: true);
     }
 
     [PunRPC]
@@ -473,14 +485,11 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         _isTeamMode = teamMode;
 
-        if (teamVoteUI != null) teamVoteUI.Hide();
-
+        teamVoteUI?.Hide();
         playFabManager.SetTeamMode(teamMode);
-
-        Debug.Log($"[Network] Team mode: {teamMode}");
-
-        // Deduct bet from local player
         playFabManager.DeductBetOnMatchStart();
+
+        Debug.Log($"[Network] Team mode result: {teamMode}");
 
         if (PhotonNetwork.IsMasterClient)
             StartNewMatch();
@@ -494,28 +503,33 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         _team1Score = 0;
         _team2Score = 0;
-        _dealerSeat = Random.Range(0, 4);
-        photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, _dealerSeat);
+        int firstDealer = UnityEngine.Random.Range(0, 4);
+        photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, firstDealer);
     }
+
+    // ─────────────────────────────────────────────────────────────
+    //  HAND START
+    // ─────────────────────────────────────────────────────────────
 
     [PunRPC]
     private void RPC_StartHand(int dealerSeat)
     {
-        _dealerSeat = dealerSeat;
-        _team1Tricks = 0;
-        _team2Tricks = 0;
-        _trump = ' ';
+        _dealerSeat      = dealerSeat;
+        _team1Tricks     = 0;
+        _team2Tricks     = 0;
+        _trump           = ' ';
         _trumpPickerSeat = -1;
-        _cycled = 0;
-        _skipSeat = -1;
+        _cycled          = 0;
+        _skipSeat        = -1;
         _played.Clear();
         _hands.Clear();
-
-        playFabManager.SetDealer(RemapSeatToPanel(dealerSeat));
-        playFabManager.ClearTrump();
+        _deck.Clear();
 
         SetState(GameState.Dealing);
         SetStatus("Dealing cards...");
+
+        playFabManager.SetDealer(RemapSeatToPanel(dealerSeat));
+        playFabManager.ClearTrump();
 
         if (PhotonNetwork.IsMasterClient)
             DealCards();
@@ -527,22 +541,21 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     private void DealCards()
     {
-        // Build and shuffle deck
-        _deck.Clear();
-        foreach (string type in TYPES)
-            foreach (string suit in SUITS)
+        // Build deck
+        foreach (string type in CARD_TYPES)
+            foreach (string suit in CARD_SUITS)
                 _deck.Add(type + suit);
 
-        // Shuffle
+        // Fisher-Yates shuffle
         for (int i = _deck.Count - 1; i > 0; i--)
         {
-            int j = Random.Range(0, i + 1);
+            int j      = UnityEngine.Random.Range(0, i + 1);
             string tmp = _deck[i];
-            _deck[i] = _deck[j];
-            _deck[j] = tmp;
+            _deck[i]   = _deck[j];
+            _deck[j]   = tmp;
         }
 
-        // Deal 5 cards to each seat
+        // Deal 5 cards per seat
         for (int seat = 0; seat < 4; seat++)
         {
             _hands[seat] = new List<string>();
@@ -553,28 +566,23 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             }
         }
 
-        // Upcard
-        string upcard = _deck[0];
+        string upcard = _deck[0]; // top of remaining deck
 
-        // Send each player their hand + upcard
-        foreach (Player player in PhotonNetwork.PlayerList)
+        // Send each human player their hand
+        foreach (Player p in PhotonNetwork.PlayerList)
         {
             object seatObj;
-            if (!player.CustomProperties.TryGetValue(PROP_SEAT, out seatObj)) continue;
+            if (!p.CustomProperties.TryGetValue(PROP_SEAT, out seatObj)) continue;
 
-            int seat = (int)seatObj;
+            int    seat    = (int)seatObj;
             string handStr = string.Join(",", _hands[seat]);
 
-            photonView.RPC(nameof(RPC_ReceiveHand), player, handStr, upcard, _dealerSeat);
+            photonView.RPC(nameof(RPC_ReceiveHand), p,
+                handStr, upcard, _dealerSeat);
         }
 
-        // Send bot hands to all (master handles bots)
-        foreach (int botSeat in _botSeats)
-        {
-            string handStr = string.Join(",", _hands[botSeat]);
-            photonView.RPC(nameof(RPC_ReceiveBotHand), RpcTarget.MasterClient,
-                botSeat, handStr, upcard);
-        }
+        // Bot hands stay on master client — no RPC needed
+        // master client already has _hands populated
     }
 
     [PunRPC]
@@ -582,27 +590,25 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         List<string> hand = new List<string>(handStr.Split(','));
         _hands[_localSeat] = hand;
-
-        cardManager.AnimateDeal(hand, upcard, dealerSeat, _localSeat);
+        _deck.Clear();
+        _deck.Add(upcard); // store upcard at index 0
 
         SetState(GameState.TrumpPhase1);
-    }
-
-    [PunRPC]
-    private void RPC_ReceiveBotHand(int botSeat, string handStr, string upcard)
-    {
-        _hands[botSeat] = new List<string>(handStr.Split(','));
+        cardManager?.AnimateDeal(hand, upcard, dealerSeat, _localSeat);
+        // EuchreCardManager calls BeginTrumpPhase1() after deal animation finishes
     }
 
     // ─────────────────────────────────────────────────────────────
     //  TRUMP PHASE 1 — Order Up / Pass
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>Called by EuchreCardManager after deal animation completes.</summary>
     public void BeginTrumpPhase1()
     {
         _cycled = 0;
         int firstSeat = (_dealerSeat + 1) % 4;
-        photonView.RPC(nameof(RPC_TrumpPhase1Turn), RpcTarget.All, firstSeat, _deck[0]);
+        photonView.RPC(nameof(RPC_TrumpPhase1Turn), RpcTarget.All,
+            firstSeat, _deck.Count > 0 ? _deck[0] : "9C");
     }
 
     [PunRPC]
@@ -611,72 +617,83 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         SetState(GameState.TrumpPhase1);
         _turnSeat = activeSeat;
 
-        bool isDealer = activeSeat == _dealerSeat;
-        bool isMyTurn = activeSeat == _localSeat;
-        bool isDealerForced = _cycled == 0 && isDealer;
+        bool isMyTurn   = activeSeat == _localSeat;
+        bool isDealer   = activeSeat == _dealerSeat;
+        bool forced     = _cycled > 0 && isDealer; // dealer forced on second pass
 
         SetStatus(isMyTurn
             ? "Your turn — Order up or Pass?"
-            : $"{GetPlayerName(activeSeat)}'s turn...");
+            : $"{_seatToName.GetValueOrDefault(activeSeat, "Player")}'s turn...");
 
-        // Bot
+        // ── Bot ───────────────────────────────────────────────────
         if (_botSeats.Contains(activeSeat) && PhotonNetwork.IsMasterClient)
         {
-            StartCoroutine(BotTrumpPhase1Decision(activeSeat, upcard, isDealerForced));
+            StartCoroutine(BotTrumpPhase1(activeSeat, upcard, forced));
             return;
         }
 
         if (!isMyTurn) return;
 
-        // Show trump popup phase 1
-        char upcardSuit = upcard[1];
-        trumpUI.ShowPhase1(upcardSuit, canPass: !isDealerForced,
-            onOrderUp: () => LocalOrderUp(),
-            onPass: () => LocalPassPhase1(upcard));
+        char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
+
+        trumpUI?.ShowPhase1(upcardSuit, canPass: !forced,
+            onOrderUp: () =>
+            {
+                // Go-alone prompt is inside TrumpSelectionUI
+                // OnGoAloneNo / OnGoAloneYes call back here
+                photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All,
+                    _localSeat, (int)upcardSuit);
+            },
+            onPass: () =>
+            {
+                AdvanceTrumpPhase1(upcard);
+            });
     }
 
-    private void LocalOrderUp()
-    {
-        trumpUI.Hide();
-        photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All, _localSeat, _deck[0][1]);
-    }
-
-    private void LocalPassPhase1(string upcard)
-    {
-        trumpUI.Hide();
-        NextTrumpPhase1Turn(upcard);
-    }
-
-    private void NextTrumpPhase1Turn(string upcard)
+    private void AdvanceTrumpPhase1(string upcard)
     {
         int next = (_turnSeat + 1) % 4;
-        if (next == (_dealerSeat + 1) % 4) _cycled++;
 
-        if (_cycled >= 1)
+        // Check if we've completed a full cycle
+        if (next == (_dealerSeat + 1) % 4)
         {
-            // Everyone passed phase 1 — move to phase 2
-            photonView.RPC(nameof(RPC_BeginTrumpPhase2), RpcTarget.All);
-            return;
+            _cycled++;
+
+            // Dealer forced pick: _cycled == 1 means first full pass done
+            // but standard Euchre: if cycled >= 1, dealer must pick in phase 1
+            // Actually in standard: phase 1 is ordering up the upcard.
+            // After one full cycle with no order-up → phase 2 (choose suit).
+            if (_cycled >= 1)
+            {
+                photonView.RPC(nameof(RPC_StartTrumpPhase2), RpcTarget.All,
+                    upcard.Length > 1 ? upcard[1].ToString() : "S");
+                return;
+            }
         }
 
         photonView.RPC(nameof(RPC_TrumpPhase1Turn), RpcTarget.All, next, upcard);
     }
 
     [PunRPC]
-    private void RPC_TrumpOrdered(int pickerSeat, char suit)
+    private void RPC_TrumpOrdered(int pickerSeat, int suitInt)
     {
-        _trump = suit;
+        char suit        = (char)suitInt;
+        _trump           = suit;
         _trumpPickerSeat = pickerSeat;
 
+        trumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), suit);
-        SetState(GameState.Playing);
+        cardManager?.HideUpcard();
 
-        // Dealer picks up upcard
-        if (_localSeat == _dealerSeat)
-            cardManager.ShowDealerPickup(_deck[0]);
+        SetState(GameState.Playing);
+        SetStatus("Trump selected — game begins!");
 
         if (PhotonNetwork.IsMasterClient)
-            StartCoroutine(DelayThenBeginRounds());
+            StartCoroutine(DelayThen(() =>
+            {
+                int first = (_dealerSeat + 1) % 4;
+                photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, first);
+            }, 1f));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -684,13 +701,14 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     // ─────────────────────────────────────────────────────────────
 
     [PunRPC]
-    private void RPC_BeginTrumpPhase2()
+    private void RPC_StartTrumpPhase2(string excludedSuit)
     {
         SetState(GameState.TrumpPhase2);
         _cycled = 0;
+
         int firstSeat = (_dealerSeat + 1) % 4;
         photonView.RPC(nameof(RPC_TrumpPhase2Turn), RpcTarget.All,
-            firstSeat, _deck[0][1].ToString());
+            firstSeat, excludedSuit);
     }
 
     [PunRPC]
@@ -698,32 +716,31 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         _turnSeat = activeSeat;
 
-        bool isDealer = activeSeat == _dealerSeat;
         bool isMyTurn = activeSeat == _localSeat;
-        bool isDealerForced = isDealer; // dealer must pick in phase 2
+        bool isDealer = activeSeat == _dealerSeat;
+        bool forced   = isDealer; // dealer MUST pick in phase 2
 
         SetStatus(isMyTurn
-            ? "Choose trump suit or Pass"
-            : $"{GetPlayerName(activeSeat)} is choosing...");
+            ? "Choose trump suit"
+            : $"{_seatToName.GetValueOrDefault(activeSeat, "Player")} is choosing...");
 
-        // Bot
+        // ── Bot ───────────────────────────────────────────────────
         if (_botSeats.Contains(activeSeat) && PhotonNetwork.IsMasterClient)
         {
-            StartCoroutine(BotTrumpPhase2Decision(activeSeat, excludedSuit, isDealerForced));
+            StartCoroutine(BotTrumpPhase2(activeSeat, excludedSuit, forced));
             return;
         }
 
         if (!isMyTurn) return;
 
-        trumpUI.ShowPhase2(excludedSuit, canPass: !isDealerForced,
+        trumpUI?.ShowPhase2(excludedSuit, canPass: !forced,
             onSuitPicked: (suit) =>
             {
-                trumpUI.Hide();
-                photonView.RPC(nameof(RPC_TrumpPicked), RpcTarget.All, _localSeat, suit.ToString());
+                photonView.RPC(nameof(RPC_TrumpSuitChosen), RpcTarget.All,
+                    _localSeat, suit.ToString());
             },
             onPass: () =>
             {
-                trumpUI.Hide();
                 int next = (_turnSeat + 1) % 4;
                 photonView.RPC(nameof(RPC_TrumpPhase2Turn), RpcTarget.All,
                     next, excludedSuit);
@@ -731,85 +748,89 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     }
 
     [PunRPC]
-    private void RPC_TrumpPicked(int pickerSeat, string suitStr)
+    private void RPC_TrumpSuitChosen(int pickerSeat, string suitStr)
     {
-        _trump = suitStr[0];
+        _trump           = suitStr[0];
         _trumpPickerSeat = pickerSeat;
 
+        trumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), _trump);
+        cardManager?.HideUpcard();
+
         SetState(GameState.Playing);
+        SetStatus("Trump chosen — game begins!");
 
         if (PhotonNetwork.IsMasterClient)
-            StartCoroutine(DelayThenBeginRounds());
+            StartCoroutine(DelayThen(() =>
+            {
+                int first = (_dealerSeat + 1) % 4;
+                photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, first);
+            }, 1f));
     }
 
     // ─────────────────────────────────────────────────────────────
     //  GO ALONE
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>Called by TrumpSelectionUI when local player confirms go alone.</summary>
     public void LocalGoAlone()
     {
-        // Partner is seat opposite (seat+2)%4
         int partnerSeat = (_localSeat + 2) % 4;
         photonView.RPC(nameof(RPC_GoAlone), RpcTarget.All, _localSeat, partnerSeat);
     }
 
     [PunRPC]
-    private void RPC_GoAlone(int goAloneSeat, int skipSeat)
+    private void RPC_GoAlone(int goAloneSeat, int partnerSeat)
     {
-        _skipSeat = skipSeat;
+        _skipSeat = partnerSeat;
         playFabManager.SetGoAlone(RemapSeatToPanel(goAloneSeat));
-        Debug.Log($"[Network] Go alone: seat {goAloneSeat}, skip seat {skipSeat}");
+
+        Debug.Log($"[Network] Go alone: seat {goAloneSeat}, skip seat {partnerSeat}");
     }
 
     // ─────────────────────────────────────────────────────────────
     //  TRICK PLAYING
     // ─────────────────────────────────────────────────────────────
 
-    private IEnumerator DelayThenBeginRounds()
-    {
-        yield return new WaitForSeconds(1f);
-        int firstTurn = (_dealerSeat + 1) % 4;
-        photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, firstTurn);
-    }
-
     [PunRPC]
     private void RPC_BeginTurn(int activeSeat)
     {
-        _turnSeat = activeSeat;
-
         // Skip partner if going alone
         if (_skipSeat != -1 && activeSeat == _skipSeat)
         {
-            int next = (_turnSeat + 1) % 4;
-            if (next == _skipSeat) next = (_next + 1) % 4; // edge case
+            int next = (activeSeat + 1) % 4;
+            if (next == _skipSeat) next = (next + 1) % 4;
             photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, next);
             return;
         }
 
-        SetStatus(activeSeat == _localSeat
-            ? "Your turn — play a card"
-            : $"{GetPlayerName(activeSeat)}'s turn...");
+        _turnSeat = activeSeat;
 
-        // Bot
+        bool isMyTurn = activeSeat == _localSeat;
+
+        SetStatus(isMyTurn
+            ? "Your turn — select a card"
+            : $"{_seatToName.GetValueOrDefault(activeSeat, "Player")}'s turn...");
+
+        // ── Bot ───────────────────────────────────────────────────
         if (_botSeats.Contains(activeSeat) && PhotonNetwork.IsMasterClient)
         {
             StartCoroutine(BotPlayCard(activeSeat));
             return;
         }
 
-        if (activeSeat != _localSeat) return;
+        if (!isMyTurn) return;
 
-        // Enable cards for local player
-        cardManager.EnableCardSelection(true, _played, _trump, ALT_SUITS);
+        // Enable card selection for local player
+        cardManager?.EnableCardSelection(true, _played, _trump, ALT_SUITS);
     }
 
-    /// <summary>Called by EuchreCardManager when local player selects and confirms a card.</summary>
+    /// <summary>Called by EuchreCardManager when local player confirms a card.</summary>
     public void LocalPlayCard(string cardType)
     {
         if (_turnSeat != _localSeat) return;
 
-        cardManager.EnableCardSelection(false, null, ' ', null);
+        cardManager?.EnableCardSelection(false, null, ' ', null);
 
         if (_hands.ContainsKey(_localSeat))
             _hands[_localSeat].Remove(cardType);
@@ -822,21 +843,26 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         _played.Add(cardType);
 
-        // Animate card to table
-        int panelIndex = RemapSeatToPanel(fromSeat);
-        cardManager.AnimateCardToTable(panelIndex, cardType);
+        // Track trick order
+        _trickOrder.Add(fromSeat);
 
-        int numPlayers = _skipSeat != -1 ? 3 : 4;
+        int panelIdx = RemapSeatToPanel(fromSeat);
+        cardManager?.AnimateCardToTable(panelIdx, cardType);
 
-        if (_played.Count >= numPlayers)
+        int numPlaying = _skipSeat != -1 ? 3 : 4;
+
+        if (_played.Count >= numPlaying)
         {
             SetState(GameState.ScoringTrick);
-            StartCoroutine(DelayThenScoreTrick());
+            if (PhotonNetwork.IsMasterClient)
+                StartCoroutine(DelayThen(ScoreTrick, 1.5f));
         }
         else
         {
             int next = (fromSeat + 1) % 4;
-            if (next == _skipSeat) next = (next + 1) % 4;
+            if (_skipSeat != -1 && next == _skipSeat)
+                next = (next + 1) % 4;
+
             photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, next);
         }
     }
@@ -845,76 +871,71 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     //  TRICK SCORING
     // ─────────────────────────────────────────────────────────────
 
-    private IEnumerator DelayThenScoreTrick()
-    {
-        yield return new WaitForSeconds(1.5f);
-        ScoreTrick();
-    }
-
     private void ScoreTrick()
     {
+        if (_played.Count == 0) return;
+
         char leadSuit = _played[0][1];
-        if (_played[0][0] == 'J' && ALT_SUITS.ContainsKey(_trump) &&
-            _played[0][1] == ALT_SUITS[_trump])
+        if (_played[0][0] == 'J' && ALT_SUITS.ContainsKey(_trump)
+            && _played[0][1] == ALT_SUITS[_trump])
             leadSuit = _trump;
 
-        int winnerIdx = 0;
-        int bestVal = 0;
-
-        // Reconstruct turn order for this trick
-        List<int> trickOrder = GetTrickOrder();
+        int bestVal      = -1;
+        int winnerTrickIdx = 0;
 
         for (int i = 0; i < _played.Count; i++)
         {
             int val = EvaluateCard(_played[i], leadSuit);
             if (val > bestVal)
             {
-                bestVal = val;
-                winnerIdx = i;
+                bestVal        = val;
+                winnerTrickIdx = i;
             }
         }
 
-        int winnerSeat = trickOrder[winnerIdx];
+        int winnerSeat = winnerTrickIdx < _trickOrder.Count
+            ? _trickOrder[winnerTrickIdx]
+            : _dealerSeat;
 
-        if (_isTeamMode)
-        {
-            if (winnerSeat % 2 == 0) _team1Tricks++;
-            else _team2Tricks++;
-        }
-        else
-        {
-            // Free-for-all: track per-seat
-            // For simplicity, team1 = even seats, team2 = odd seats
-            if (winnerSeat % 2 == 0) _team1Tricks++;
-            else _team2Tricks++;
-        }
-
-        _played.Clear();
-        cardManager.ClearTableCards();
-
-        int totalTricks = _team1Tricks + _team2Tricks;
-        if (totalTricks >= 5)
-            photonView.RPC(nameof(RPC_ScoreHand), RpcTarget.All,
-                _team1Tricks, _team2Tricks, winnerSeat);
-        else
-            photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, winnerSeat);
-    }
-
-    private List<int> GetTrickOrder()
-    {
-        List<int> order = new List<int>();
-        int startSeat = (_turnSeat - _played.Count + 1 + 4) % 4;
-
-        for (int i = 0; i < _played.Count; i++)
-        {
-            int s = (startSeat + i) % 4;
-            if (s != _skipSeat) order.Add(s);
-        }
-        return order;
+        photonView.RPC(nameof(RPC_TrickWon), RpcTarget.All, winnerSeat);
     }
 
     [PunRPC]
-    private void RPC_ScoreHand(int t1Tricks, int t2Tricks, int trickWinnerSeat)
+    private void RPC_TrickWon(int winnerSeat)
+    {
+        if (winnerSeat % 2 == 0) _team1Tricks++;
+        else                      _team2Tricks++;
+
+        _played.Clear();
+        _trickOrder.Clear();
+
+        cardManager?.ClearTableCards();
+
+        int totalTricks = _team1Tricks + _team2Tricks;
+
+        SetStatus($"{_seatToName.GetValueOrDefault(winnerSeat, "Player")} wins the trick!");
+
+        if (totalTricks >= 5)
+        {
+            if (PhotonNetwork.IsMasterClient)
+                StartCoroutine(DelayThen(() =>
+                    photonView.RPC(nameof(RPC_ScoreHand), RpcTarget.All,
+                        _team1Tricks, _team2Tricks), 0.8f));
+        }
+        else
+        {
+            if (PhotonNetwork.IsMasterClient)
+                StartCoroutine(DelayThen(() =>
+                    photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, winnerSeat), 0.5f));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  HAND SCORING
+    // ─────────────────────────────────────────────────────────────
+
+    [PunRPC]
+    private void RPC_ScoreHand(int t1Tricks, int t2Tricks)
     {
         _team1Tricks = t1Tricks;
         _team2Tricks = t2Tricks;
@@ -922,17 +943,18 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         int pts1 = 0, pts2 = 0;
         bool wentAlone = _skipSeat != -1;
 
-        if (_trumpPickerSeat % 2 == 0)
+        // Standard Euchre scoring
+        if (_trumpPickerSeat % 2 == 0) // team 1 picked trump
         {
-            if (_team1Tricks == 5) pts1 = wentAlone ? 4 : 2;
+            if (_team1Tricks == 5)      pts1 = wentAlone ? 4 : 2;
             else if (_team1Tricks >= 3) pts1 = 1;
-            else pts2 = 2;
+            else                        pts2 = 2; // euchred
         }
-        else
+        else // team 2 picked trump
         {
-            if (_team2Tricks == 5) pts2 = wentAlone ? 4 : 2;
+            if (_team2Tricks == 5)      pts2 = wentAlone ? 4 : 2;
             else if (_team2Tricks >= 3) pts2 = 1;
-            else pts1 = 2;
+            else                        pts1 = 2; // euchred
         }
 
         _team1Score += pts1;
@@ -940,17 +962,20 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         SetState(GameState.HandOver);
 
+        Debug.Log($"[Network] Hand scored: T1={_team1Score} T2={_team2Score}");
+
         if (_team1Score >= WIN_SCORE || _team2Score >= WIN_SCORE)
         {
             EndMatch();
             return;
         }
 
-        // New hand — rotate dealer
+        // Next hand — rotate dealer
         if (PhotonNetwork.IsMasterClient)
         {
-            int newDealer = (_dealerSeat + 1) % 4;
-            photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, newDealer);
+            int nextDealer = (_dealerSeat + 1) % 4;
+            StartCoroutine(DelayThen(() =>
+                photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, nextDealer), 2f));
         }
     }
 
@@ -965,28 +990,31 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         bool localWon = (_localSeat % 2 == 0 && _team1Score >= WIN_SCORE)
                      || (_localSeat % 2 == 1 && _team2Score >= WIN_SCORE);
 
-        // PlayFab: distribute winnings and save stats
+        int pot       = _config?.totalPot    ?? 400;
+        int betAmount = _config?.betAmount   ?? 100;
+
         if (localWon)
             playFabManager.DistributeWinnings();
 
-        playFabManager.SaveMatchStats(
-            won: localWon,
-            tricksWon: _localSeat % 2 == 0 ? _team1Tricks : _team2Tricks,
-            totalTricks: 5);
+        int localTricks = _localSeat % 2 == 0 ? _team1Tricks : _team2Tricks;
+        playFabManager.SaveMatchStats(localWon, localTricks, 5);
 
         int winnerTeam = _team1Score >= WIN_SCORE ? 1 : 2;
 
-        if (gameOverUI != null)
-            gameOverUI.Show(winnerTeam, _team1Score, _team2Score,
-                onRematch: OnRematch,
-                onMainMenu: OnMainMenu);
+        gameOverUI?.Show(
+            winnerTeam:     winnerTeam,
+            team1Score:     _team1Score,
+            team2Score:     _team2Score,
+            onRematch:      OnRematch,
+            onMainMenu:     OnMainMenu,
+            localPlayerWon: localWon,
+            pot:            pot,
+            betAmount:      betAmount);
     }
 
     private void OnRematch()
     {
-        // Deduct bet again
         playFabManager.DeductBetOnMatchStart();
-
         if (PhotonNetwork.IsMasterClient)
             StartNewMatch();
     }
@@ -1001,34 +1029,37 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     //  BOT AI
     // ─────────────────────────────────────────────────────────────
 
-    private IEnumerator BotTrumpPhase1Decision(int seat, string upcard, bool forced)
+    private IEnumerator BotTrumpPhase1(int seat, string upcard, bool forced)
     {
-        yield return new WaitForSeconds(Random.Range(0.8f, 1.5f));
+        yield return new WaitForSeconds(UnityEngine.Random.Range(0.7f, 1.4f));
 
-        bool orderUp = forced || Random.value > 0.4f;
+        char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
+
+        // Simple bot: order up ~60% of the time; always if forced
+        bool orderUp = forced || UnityEngine.Random.value > 0.4f;
 
         if (orderUp)
-            photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All, seat, upcard[1]);
+            photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All,
+                seat, (int)upcardSuit);
         else
-            NextTrumpPhase1Turn(upcard);
+            AdvanceTrumpPhase1(upcard);
     }
 
-    private IEnumerator BotTrumpPhase2Decision(int seat, string excludedSuit, bool forced)
+    private IEnumerator BotTrumpPhase2(int seat, string excludedSuit, bool forced)
     {
-        yield return new WaitForSeconds(Random.Range(0.8f, 1.5f));
+        yield return new WaitForSeconds(UnityEngine.Random.Range(0.7f, 1.4f));
 
-        bool pick = forced || Random.value > 0.4f;
+        bool pick = forced || UnityEngine.Random.value > 0.4f;
 
         if (pick)
         {
-            // Pick random suit except excluded
-            string[] options = { "C", "D", "H", "S" };
+            // Pick first available suit
             string chosen = "C";
-            foreach (string s in options)
+            foreach (string s in new[] { "C", "D", "H", "S" })
             {
                 if (s != excludedSuit) { chosen = s; break; }
             }
-            photonView.RPC(nameof(RPC_TrumpPicked), RpcTarget.All, seat, chosen);
+            photonView.RPC(nameof(RPC_TrumpSuitChosen), RpcTarget.All, seat, chosen);
         }
         else
         {
@@ -1039,26 +1070,49 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     private IEnumerator BotPlayCard(int seat)
     {
-        yield return new WaitForSeconds(Random.Range(0.8f, 1.5f));
+        yield return new WaitForSeconds(UnityEngine.Random.Range(0.7f, 1.4f));
 
         if (!_hands.ContainsKey(seat) || _hands[seat].Count == 0) yield break;
 
-        // Simple bot: play first valid card
-        string card = _hands[seat][0];
+        string card = ChooseBotCard(seat);
+        if (string.IsNullOrEmpty(card)) yield break;
 
-        // Try to follow suit
+        _hands[seat].Remove(card);
+        photonView.RPC(nameof(RPC_CardPlayed), RpcTarget.All, seat, card);
+    }
+
+    private string ChooseBotCard(int seat)
+    {
+        List<string> hand = _hands[seat];
+        if (hand == null || hand.Count == 0) return null;
+
+        // Follow lead suit if possible
         if (_played.Count > 0)
         {
             char leadSuit = _played[0][1];
-            foreach (string c in _hands[seat])
+            if (_played[0][0] == 'J' && ALT_SUITS.ContainsKey(_trump)
+                && _played[0][1] == ALT_SUITS[_trump])
+                leadSuit = _trump;
+
+            foreach (string c in hand)
             {
-                if (c[1] == leadSuit) { card = c; break; }
+                bool isLeft = c[0] == 'J' && ALT_SUITS.ContainsKey(_trump)
+                           && c[1] == ALT_SUITS[_trump];
+                if ((c[1] == leadSuit && !isLeft) || (isLeft && leadSuit == _trump))
+                    return c;
             }
         }
 
-        _hands[seat].Remove(card);
+        // Play highest trump if available
+        int bestVal  = -1;
+        string bestCard = hand[0];
+        foreach (string c in hand)
+        {
+            int val = EvaluateCard(c, _trump);
+            if (val > bestVal) { bestVal = val; bestCard = c; }
+        }
 
-        photonView.RPC(nameof(RPC_CardPlayed), RpcTarget.All, seat, card);
+        return bestCard;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -1067,20 +1121,23 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     private int EvaluateCard(string cardType, char leadSuit)
     {
-        char val = cardType[0];
+        char val  = cardType[0];
         char suit = cardType[1];
 
         bool isRight = val == 'J' && suit == _trump;
-        bool isLeft = val == 'J' && ALT_SUITS.ContainsKey(_trump) && suit == ALT_SUITS[_trump];
+        bool isLeft  = val == 'J' && ALT_SUITS.ContainsKey(_trump)
+                    && suit == ALT_SUITS[_trump];
 
         if (isRight) return 15;
-        if (isLeft) return 14;
+        if (isLeft)  return 14;
 
         if (suit == _trump)
-            return val switch { 'A' => 13, 'K' => 12, 'Q' => 11, 'T' => 10, '9' => 9, _ => 0 };
+            return val switch
+            { 'A'=>13,'K'=>12,'Q'=>11,'T'=>10,'9'=>9,_=>0 };
 
         if (suit == leadSuit)
-            return val switch { 'A' => 7, 'K' => 6, 'Q' => 5, 'J' => 4, 'T' => 3, '9' => 2, _ => 0 };
+            return val switch
+            { 'A'=>7,'K'=>6,'Q'=>5,'J'=>4,'T'=>3,'9'=>2,_=>0 };
 
         return 0;
     }
@@ -1089,40 +1146,49 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     //  HELPERS
     // ─────────────────────────────────────────────────────────────
 
-    private string GetPlayerName(int seat)
+    /// <summary>
+    /// Remaps absolute seat to UI panel index relative to local player.
+    /// Local  → 0, Partner (seat+2%4) → 1,
+    /// Left (seat+1%4) → 2, Right (seat+3%4) → 3.
+    /// </summary>
+    public int RemapSeatToPanel(int absoluteSeat)
     {
-        GameplayPlayerData panel = playFabManager.GetPlayerPanel(RemapSeatToPanel(seat));
-        return panel != null ? panel.DisplayName : $"Player {seat + 1}";
+        if (absoluteSeat == _localSeat) return 0;
+        int diff = (absoluteSeat - _localSeat + 4) % 4;
+        return diff switch { 2=>1, 1=>2, 3=>3, _=>0 };
     }
 
     private void SetState(GameState state)
     {
         _state = state;
-        Debug.Log($"[Network] State → {state}");
+        Debug.Log($"[Network] → {state}");
     }
 
     private void SetStatus(string msg)
     {
         if (statusText != null) statusText.text = msg;
-        Debug.Log($"[Network] Status: {msg}");
+    }
+
+    private IEnumerator DelayThen(Action action, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        action?.Invoke();
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  PUBLIC ACCESSORS (for UI scripts)
+    //  PUBLIC ACCESSORS
     // ─────────────────────────────────────────────────────────────
 
-    public int LocalSeat => _localSeat;
-    public int TurnSeat => _turnSeat;
-    public char Trump => _trump;
-    public bool IsTeamMode => _isTeamMode;
-    public int Team1Score => _team1Score;
-    public int Team2Score => _team2Score;
-    public GameState State => _state;
+    public int       LocalSeat   => _localSeat;
+    public int       TurnSeat    => _turnSeat;
+    public char      Trump       => _trump;
+    public bool      IsTeamMode  => _isTeamMode;
+    public int       Team1Score  => _team1Score;
+    public int       Team2Score  => _team2Score;
+    public GameState State       => _state;
 
-    public List<string> GetLocalHand()
-    {
-        return _hands.ContainsKey(_localSeat)
+    public List<string> GetLocalHand() =>
+        _hands.ContainsKey(_localSeat)
             ? new List<string>(_hands[_localSeat])
             : new List<string>();
-    }
 }

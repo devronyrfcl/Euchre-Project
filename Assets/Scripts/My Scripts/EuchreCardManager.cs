@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
@@ -19,7 +19,7 @@ public class EuchreCardManager : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
 
     [Header("=== CANVAS ===")]
-    [SerializeField] private Canvas gameCanvas;
+    [SerializeField] private Canvas      gameCanvas;
     [SerializeField] private RectTransform cardHolder; // "PlayerCardHolder" object
 
     [Header("=== PREFABS ===")]
@@ -29,7 +29,7 @@ public class EuchreCardManager : MonoBehaviour
     [Header("=== CARD SPRITES ===")]
     [Tooltip("Assign 24 card sprites in order: 9C,9D,9H,9S,TC,TD...")]
     [SerializeField] private List<Sprite> cardSprites = new List<Sprite>();
-    [SerializeField] private Sprite cardBackSprite;
+    [SerializeField] private Sprite       cardBackSprite;
 
     // ─────────────────────────────────────────────────────────────
     //  Deal Source Positions (canvas anchored positions)
@@ -102,9 +102,9 @@ public class EuchreCardManager : MonoBehaviour
 
     // Follow-suit validation state
     private List<string> _currentPlayedCards;
-    private char _currentTrump;
+    private char         _currentTrump;
     private Dictionary<char, char> _currentAltSuits;
-    private bool _selectionEnabled = false;
+    private bool         _selectionEnabled = false;
 
     // ─────────────────────────────────────────────────────────────
     //  Unity Lifecycle
@@ -209,7 +209,7 @@ public class EuchreCardManager : MonoBehaviour
         GameObject obj = Instantiate(shuffleCardPrefab, gameCanvas.transform);
         RectTransform rt = obj.GetComponent<RectTransform>();
         rt.anchoredPosition = from;
-        rt.localScale = Vector3.one;
+        rt.localScale       = Vector3.one;
 
         // DOTween move to destination
         rt.DOAnchorPos(to, 0.25f).SetEase(Ease.OutCubic);
@@ -260,8 +260,8 @@ public class EuchreCardManager : MonoBehaviour
 
             // Start at receive position, scale 0
             rt.anchoredPosition = LOCAL_RECEIVE_POS;
-            rt.sizeDelta = HAND_CARD_SIZE;
-            rt.localScale = Vector3.zero;
+            rt.sizeDelta        = HAND_CARD_SIZE;
+            rt.localScale       = Vector3.zero;
 
             // Set sprite
             Image img = obj.GetComponent<Image>();
@@ -277,7 +277,7 @@ public class EuchreCardManager : MonoBehaviour
 
             // Tween to hand position
             Vector2 targetPos = HAND_POSITIONS[i];
-            float targetRot = HAND_ROTATIONS_Z[i];
+            float   targetRot = HAND_ROTATIONS_Z[i];
 
             rt.DOAnchorPos(targetPos, 0.35f).SetEase(Ease.OutBack);
             rt.DOScale(Vector3.one, 0.35f).SetEase(Ease.OutBack);
@@ -315,8 +315,8 @@ public class EuchreCardManager : MonoBehaviour
         GameObject obj = Instantiate(playableCardPrefab, cardHolder);
         RectTransform rt = obj.GetComponent<RectTransform>();
         rt.anchoredPosition = LOCAL_RECEIVE_POS;
-        rt.sizeDelta = HAND_CARD_SIZE;
-        rt.localScale = Vector3.zero;
+        rt.sizeDelta        = HAND_CARD_SIZE;
+        rt.localScale       = Vector3.zero;
 
         Image img = obj.GetComponent<Image>();
         if (img != null && _spriteMap.ContainsKey(cardType))
@@ -343,10 +343,10 @@ public class EuchreCardManager : MonoBehaviour
     public void EnableCardSelection(bool enabled, List<string> playedCards,
                                      char trump, Dictionary<char, char> altSuits)
     {
-        _selectionEnabled = enabled;
-        _currentPlayedCards = playedCards;
-        _currentTrump = trump;
-        _currentAltSuits = altSuits;
+        _selectionEnabled    = enabled;
+        _currentPlayedCards  = playedCards;
+        _currentTrump        = trump;
+        _currentAltSuits     = altSuits;
 
         foreach (EuchreCardUI card in _handCards)
             if (card != null) card.SetInteractable(enabled);
@@ -446,8 +446,8 @@ public class EuchreCardManager : MonoBehaviour
             : DEAL_THROW_POSITIONS[panelIndex];
 
         rt.anchoredPosition = startPos;
-        rt.sizeDelta = new Vector2(67.1137f, 91.4f);
-        rt.localRotation = Quaternion.Euler(TABLE_CARD_ROTATION);
+        rt.sizeDelta        = new Vector2(67.1137f, 91.4f);
+        rt.localRotation    = Quaternion.Euler(TABLE_CARD_ROTATION);
 
         // Show front face
         Image img = obj.GetComponent<Image>();

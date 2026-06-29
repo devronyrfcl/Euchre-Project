@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -17,24 +17,24 @@ public class GameplayPlayerData : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
 
     [Header("=== IDENTITY ===")]
-    [SerializeField] private TMP_Text nameText;
-    [SerializeField] private TMP_Text pcText;
-    [SerializeField] private Image avatarImage;
-    [SerializeField] private Sprite defaultAvatar;
+    [SerializeField] private TMP_Text  nameText;
+    [SerializeField] private TMP_Text  pcText;
+    [SerializeField] private Image     avatarImage;
+    [SerializeField] private Sprite    defaultAvatar;
 
     [Header("=== DEALER ICON ===")]
     [SerializeField] private GameObject dealerIcon;
 
     [Header("=== TRUMP DISPLAY ===")]
     [SerializeField] private GameObject trumpFrame;          // enabled when this player picked trump
-    [SerializeField] private Image trumpClubsIcon;
-    [SerializeField] private Image trumpDiamondsIcon;
-    [SerializeField] private Image trumpHeartsIcon;
-    [SerializeField] private Image trumpSpadesIcon;
+    [SerializeField] private Image      trumpClubsIcon;
+    [SerializeField] private Image      trumpDiamondsIcon;
+    [SerializeField] private Image      trumpHeartsIcon;
+    [SerializeField] private Image      trumpSpadesIcon;
 
     [Header("=== TEAM BADGE ===")]
     [SerializeField] private GameObject teamBadge;           // shown when team mode active
-    [SerializeField] private TMP_Text teamBadgeText;       // "Team" or "Partner"
+    [SerializeField] private TMP_Text   teamBadgeText;       // "Team" or "Partner"
 
     [Header("=== GO ALONE BADGE ===")]
     [SerializeField] private GameObject goAloneBadge;        // shown when this player goes alone
@@ -43,11 +43,11 @@ public class GameplayPlayerData : MonoBehaviour
     //  Runtime Data
     // ─────────────────────────────────────────────────────────────
 
-    public string PlayFabId { get; private set; } = "";
+    public string PlayFabId   { get; private set; } = "";
     public string DisplayName { get; private set; } = "";
-    public int PokerChips { get; private set; } = 0;
-    public int Seat { get; private set; } = -1;
-    public bool IsBot { get; private set; } = false;
+    public int    PokerChips  { get; private set; } = 0;
+    public int    Seat        { get; private set; } = -1;
+    public bool   IsBot       { get; private set; } = false;
 
     // ─────────────────────────────────────────────────────────────
     //  Setup
@@ -57,11 +57,11 @@ public class GameplayPlayerData : MonoBehaviour
     public void Setup(string playFabId, string displayName,
                       int pokerChips, int seat, bool isBot = false)
     {
-        PlayFabId = playFabId;
+        PlayFabId   = playFabId;
         DisplayName = displayName;
-        PokerChips = pokerChips;
-        Seat = seat;
-        IsBot = isBot;
+        PokerChips  = pokerChips;
+        Seat        = seat;
+        IsBot       = isBot;
 
         RefreshNameText();
         RefreshPCText();
@@ -129,20 +129,20 @@ public class GameplayPlayerData : MonoBehaviour
             trumpFrame.SetActive(isThisPlayerPicker);
 
         // Reset all suit icons to dim
-        SetSuitIconAlpha(trumpClubsIcon, 0.25f);
+        SetSuitIconAlpha(trumpClubsIcon,    0.25f);
         SetSuitIconAlpha(trumpDiamondsIcon, 0.25f);
-        SetSuitIconAlpha(trumpHeartsIcon, 0.25f);
-        SetSuitIconAlpha(trumpSpadesIcon, 0.25f);
+        SetSuitIconAlpha(trumpHeartsIcon,   0.25f);
+        SetSuitIconAlpha(trumpSpadesIcon,   0.25f);
 
         if (!isThisPlayerPicker || suit == ' ' || suit == 'N') return;
 
         // Highlight selected suit
         switch (suit)
         {
-            case 'C': SetSuitIconAlpha(trumpClubsIcon, 1f); break;
+            case 'C': SetSuitIconAlpha(trumpClubsIcon,    1f); break;
             case 'D': SetSuitIconAlpha(trumpDiamondsIcon, 1f); break;
-            case 'H': SetSuitIconAlpha(trumpHeartsIcon, 1f); break;
-            case 'S': SetSuitIconAlpha(trumpSpadesIcon, 1f); break;
+            case 'H': SetSuitIconAlpha(trumpHeartsIcon,   1f); break;
+            case 'S': SetSuitIconAlpha(trumpSpadesIcon,   1f); break;
         }
     }
 
@@ -158,7 +158,7 @@ public class GameplayPlayerData : MonoBehaviour
 
     public void SetTeamBadge(bool visible, string label)
     {
-        if (teamBadge != null) teamBadge.SetActive(visible);
+        if (teamBadge != null)     teamBadge.SetActive(visible);
         if (teamBadgeText != null) teamBadgeText.text = label;
     }
 
@@ -194,7 +194,7 @@ public class GameplayPlayerData : MonoBehaviour
     {
         if (icon == null) return;
         Color c = icon.color;
-        c.a = alpha;
+        c.a        = alpha;
         icon.color = c;
     }
 

@@ -18,14 +18,14 @@ public class GameplaySceneBootstrapper : MonoBehaviour
     {
         if (!MatchConfigLoader.Exists())
         {
-            Debug.LogWarning("[Bootstrapper] No MatchConfig found — using defaults.");
+            Debug.LogWarning("[Bootstrapper] No MatchConfig found â€” using defaults.");
             _config = new MatchConfig();
             _config.localPlayer = new MatchPlayerData
             {
-                playFabId = "DEBUG",
+                playFabId   = "DEBUG",
                 displayName = "Debug Player",
-                pokerChips = 5000,
-                seat = 0
+                pokerChips  = 5000,
+                seat        = 0
             };
         }
         else
@@ -38,7 +38,7 @@ public class GameplaySceneBootstrapper : MonoBehaviour
 
     private void Boot()
     {
-        Debug.Log($"[Bootstrapper] Booting — matchType: {_config.matchType} " +
+        Debug.Log($"[Bootstrapper] Booting â€” matchType: {_config.matchType} " +
                   $"| room: '{_config.roomCode}' | bot: {_config.allowBots}");
 
         // GameplayPlayFabManager reads config itself via MatchConfigLoader.
