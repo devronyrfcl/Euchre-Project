@@ -82,7 +82,7 @@ public class EuchreCardManager : MonoBehaviour
         34f, 17.35f, 6.48f, -4.76f, -20.2f
     };
 
-    private static readonly Vector2 HAND_CARD_SIZE = new Vector2(165f, 120f);
+    private static readonly Vector2 HAND_CARD_SIZE = new Vector2(120f, 165f);
 
     // ─────────────────────────────────────────────────────────────
     //  Runtime
