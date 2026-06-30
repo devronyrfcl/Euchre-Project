@@ -178,7 +178,7 @@ public class PlayFabManager : MonoBehaviour
     private string _playerEmail = "";
     private string _cachedAvatarUrl = "";
     private int    _cachedPC        = 0;
-   private string _cachedDisplayName = "";
+    private string _cachedDisplayName = "";
 
     // ─────────────────────────────────────────────────────────────
     //  Unity Lifecycle

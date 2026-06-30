@@ -48,6 +48,24 @@ MonoBehaviour:
   - SyncOtherPlayer
   - TurnoverTrump
   - ResetAndStartNewHand
+  - RPC_BeginTurn
+  - RPC_CardPlayed
+  - RPC_GoAlone
+  - RPC_ReceiveBotVote
+  - RPC_ReceiveHand
+  - RPC_ReceiveVote
+  - RPC_RequestSeat
+  - RPC_ScoreHand
+  - RPC_SeatConfirmed
+  - RPC_StartHand
+  - RPC_StartTeamVote
+  - RPC_StartTrumpPhase2
+  - RPC_TeamVoteResult
+  - RPC_TrickWon
+  - RPC_TrumpOrdered
+  - RPC_TrumpPhase1Turn
+  - RPC_TrumpPhase2Turn
+  - RPC_TrumpSuitChosen
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1
