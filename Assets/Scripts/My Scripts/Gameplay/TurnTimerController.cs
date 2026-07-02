@@ -2,6 +2,11 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 
+/// <summary>
+/// Counts down from 30 each turn.
+/// If timer hits 0 on local player's turn → auto plays a card.
+/// GameplayNetworkManager calls StartTimer() / StopTimer() each turn.
+/// </summary>
 public class TurnTimerController : MonoBehaviour
 {
     public static TurnTimerController Instance { get; private set; }
@@ -13,13 +18,12 @@ public class TurnTimerController : MonoBehaviour
     [SerializeField] private int turnDuration = 30;
 
     [Header("=== COLORS ===")]
-    [SerializeField] private Color normalColor = Color.white;
-    [SerializeField] private Color warningColor = Color.yellow;
-    [SerializeField] private Color urgentColor = Color.red;
+    [SerializeField] private Color normalColor  = Color.white;
+    [SerializeField] private Color warningColor = Color.yellow; // <= 10s
+    [SerializeField] private Color urgentColor  = Color.red;    // <= 5s
 
     private Coroutine _timerRoutine;
-    private bool _isLocalTurn = false;
-    private bool _isBotTurn = false;
+    private bool      _isLocalTurn = false;
 
     private void Awake()
     {
@@ -33,16 +37,21 @@ public class TurnTimerController : MonoBehaviour
             timerText.gameObject.SetActive(false);
     }
 
-    // ── isBot: true when the active seat is a bot ─────────────────
-    public void StartTimer(bool isLocalTurn, bool isBot = false)
+    // ─── Called by GameplayNetworkManager ────────────────────────
+
+    /// <summary>
+    /// Call at the start of every turn (including bots and opponents).
+    /// isLocalTurn: true only when it's the local human player's turn.
+    /// </summary>
+    public void StartTimer(bool isLocalTurn)
     {
         _isLocalTurn = isLocalTurn;
-        _isBotTurn = isBot;
 
         if (_timerRoutine != null) StopCoroutine(_timerRoutine);
         _timerRoutine = StartCoroutine(TimerRoutine());
     }
 
+    /// <summary>Call when turn ends (card played, trump selected, etc.).</summary>
     public void StopTimer()
     {
         if (_timerRoutine != null)
@@ -55,6 +64,8 @@ public class TurnTimerController : MonoBehaviour
             timerText.gameObject.SetActive(false);
     }
 
+    // ─── Internal ────────────────────────────────────────────────
+
     private IEnumerator TimerRoutine()
     {
         if (timerText != null)
@@ -64,44 +75,41 @@ public class TurnTimerController : MonoBehaviour
 
         while (remaining > 0)
         {
-            UpdateDisplay(remaining);
+            UpdateTimerText(remaining);
             yield return new WaitForSeconds(1f);
             remaining--;
         }
 
-        UpdateDisplay(0);
-        OnExpired();
+        // Time is up
+        UpdateTimerText(0);
+        OnTimerExpired();
     }
 
-    private void UpdateDisplay(int seconds)
+    private void UpdateTimerText(int seconds)
     {
         if (timerText == null) return;
+
         timerText.text = seconds.ToString();
 
-        if (seconds <= 5) timerText.color = urgentColor;
-        else if (seconds <= 10) timerText.color = warningColor;
-        else timerText.color = normalColor;
+        if (seconds <= 5)
+            timerText.color = urgentColor;
+        else if (seconds <= 10)
+            timerText.color = warningColor;
+        else
+            timerText.color = normalColor;
     }
 
-    private void OnExpired()
+    private void OnTimerExpired()
     {
         StopTimer();
 
-        // ── Bot turn expired — master client forces a play ─────────
-        if (_isBotTurn)
-        {
-            if (Photon.Pun.PhotonNetwork.IsMasterClient)
-            {
-                GameplayNetworkManager.Instance?.ForceBotPlay(
-                    GameplayNetworkManager.Instance.TurnSeat);
-            }
-            return;
-        }
+        if (!_isLocalTurn) return;
 
-        // ── Local human turn expired — auto play ──────────────────
-        if (_isLocalTurn)
-        {
-            EuchreCardManager.Instance?.AutoPlayFirstValidCard();
-        }
+        // Auto play for local player
+        EuchreCardManager cardManager = EuchreCardManager.Instance;
+        if (cardManager == null) return;
+
+        // Try to auto-select and play first valid card
+        cardManager.AutoPlayFirstValidCard();
     }
 }

@@ -50,7 +50,13 @@ public class EuchreCardManager : MonoBehaviour
          "Index 0=me, 1=partner, 2=left, 3=right")]
     [SerializeField] private RectTransform[] playerPanelRects = new RectTransform[4];
 
-    [SerializeField] private GameObject turnWinParticle;
+    [Header("=== WINNER PARTICLE POSITIONS ===")]
+    [Tooltip("Assign separate RectTransforms for particle spawn position per player. " +
+         "Index 0=me, 1=partner, 2=left, 3=right")]
+    [SerializeField] private RectTransform[] winnerParticlePositions = new RectTransform[4];
+
+    [SerializeField] private GameObject winnerParticlePrefab;
+
 
 
     // ─────────────────────────────────────────────────────────────
@@ -580,28 +586,7 @@ public class EuchreCardManager : MonoBehaviour
     public void FlyCardsToWinner(int winnerPanelIndex, Action onComplete = null)
     {
         StartCoroutine(FlyCardsToWinnerCoroutine(winnerPanelIndex, onComplete));
-        // spawn win particle at canvas in winnerpanel position and then distroy it after 5 seconds
-        if (turnWinParticle != null && winnerPanelIndex >= 0 && winnerPanelIndex < playerPanelRects.Length)
-        {
-            RectTransform winnerPanel = playerPanelRects[winnerPanelIndex];
-            if (winnerPanel != null)
-            {
-                GameObject particleObj = Instantiate(turnWinParticle, gameCanvas.transform);
-                RectTransform particleRt = particleObj.GetComponent<RectTransform>();
-                // Convert winner panel world position to canvas local position
-                Vector3[] corners = new Vector3[4];
-                winnerPanel.GetWorldCorners(corners);
-                Vector3 worldCenter = (corners[0] + corners[2]) / 2f;
-                Vector2 localPos;
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    gameCanvas.GetComponent<RectTransform>(),
-                    RectTransformUtility.WorldToScreenPoint(null, worldCenter),
-                    null,
-                    out localPos);
-                particleRt.anchoredPosition = localPos;
-                Destroy(particleObj, 5f); // destroy after 5 seconds
-            }
-        }
+        
 
     }
 
@@ -618,6 +603,9 @@ public class EuchreCardManager : MonoBehaviour
 
         // Small delay so player can see the played cards before they fly
         yield return new WaitForSeconds(0.6f);
+
+        // ── ADD THIS LINE ──────────────────────────────────────────
+        SpawnWinnerParticle(winnerPanelIndex);
 
         float flyDuration = 0.35f;
         float delayPerCard = 0.04f;
@@ -750,4 +738,90 @@ public class EuchreCardManager : MonoBehaviour
 
         GameplayNetworkManager.Instance?.LocalPlayCard(cardType);
     }
+
+    /// <summary>
+    /// Spawns winner particle at the winner's designated particle position.
+    /// Called at the start of FlyCardsToWinnerCoroutine.
+    /// </summary>
+    /// 
+    private void SpawnWinnerParticle(int winnerPanelIndex)
+    {
+        if (winnerParticlePrefab == null)
+        {
+            Debug.LogWarning("[CardManager] winnerParticlePrefab not assigned.");
+            return;
+        }
+
+        if (winnerPanelIndex < 0 || winnerPanelIndex >= winnerParticlePositions.Length
+            || winnerParticlePositions[winnerPanelIndex] == null)
+        {
+            Debug.LogWarning($"[CardManager] No particle position for panel {winnerPanelIndex}.");
+            return;
+        }
+
+        RectTransform sourceRt = winnerParticlePositions[winnerPanelIndex];
+
+        // Convert source world position to canvas local position
+        RectTransform canvasRt = gameCanvas.GetComponent<RectTransform>();
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(
+            null, sourceRt.position);
+
+        Vector2 localPoint;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            canvasRt,
+            screenPoint,
+            null,
+            out localPoint);
+
+        // Spawn under canvas
+        GameObject particle = Instantiate(winnerParticlePrefab, gameCanvas.transform);
+        RectTransform particleRt = particle.GetComponent<RectTransform>();
+
+        if (particleRt != null)
+        {
+            particleRt.anchoredPosition = localPoint;
+            particleRt.localScale = Vector3.one;
+            particleRt.localRotation = Quaternion.identity;
+        }
+
+        Destroy(particle, 5f);
+    }
+
+
+
+
+    /*private void SpawnWinnerParticle(int winnerPanelIndex)
+    {
+        if (winnerParticlePrefab == null)
+        {
+            Debug.LogWarning("[CardManager] winnerParticlePrefab not assigned.");
+            return;
+        }
+
+        if (winnerPanelIndex < 0 || winnerPanelIndex >= winnerParticlePositions.Length
+            || winnerParticlePositions[winnerPanelIndex] == null)
+        {
+            Debug.LogWarning($"[CardManager] No particle position assigned for panel {winnerPanelIndex}.");
+            return;
+        }
+
+        // Spawn under canvas so it renders correctly in Screen Space
+        GameObject particle = Instantiate(
+            winnerParticlePrefab,
+            gameCanvas.transform);
+
+        RectTransform particleRt = particle.GetComponent<RectTransform>();
+
+        if (particleRt != null)
+        {
+            // Match position of the designated particle RectTransform
+            RectTransform sourceRt = winnerParticlePositions[winnerPanelIndex];
+            particleRt.anchoredPosition = sourceRt.anchoredPosition;
+            particleRt.localScale = sourceRt.localScale;
+            particleRt.localRotation = sourceRt.localRotation;
+        }
+
+        Destroy(particle, 5f);
+    }*/
+
 }

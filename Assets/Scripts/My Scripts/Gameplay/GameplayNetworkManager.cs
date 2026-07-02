@@ -824,7 +824,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             firstSeat, _deck.Count > 0 ? _deck[0] : "9C");
     }
 
-    /*[PunRPC]
+    [PunRPC]
     private void RPC_TrumpPhase1Turn(int activeSeat, string upcard)
     {
         SetState(GameState.TrumpPhase1);
@@ -861,54 +861,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             {
                 AdvanceTrumpPhase1(upcard);
             });
-    }*/
-
-
-    [PunRPC]
-    private void RPC_TrumpPhase1Turn(int activeSeat, string upcard)
-    {
-        SetState(GameState.TrumpPhase1);
-        _turnSeat = activeSeat;
-
-        turnIndicator?.SetActiveTurn(RemapSeatToPanel(activeSeat));
-
-        bool isMyTurn = activeSeat == _localSeat;
-        turnTimer?.StartTimer(isLocalTurn: isMyTurn, isBot: _botSeats.Contains(activeSeat));
-
-        bool isDealer = activeSeat == _dealerSeat;
-        bool forced = _cycled > 0 && isDealer;
-
-        SetStatus(isMyTurn
-            ? "Order up or Pass?"
-            : $"{SeatName(activeSeat)}'s turn...");
-
-        // ── MASTER CLIENT ONLY handles bot trump decision ─────────────
-        if (_botSeats.Contains(activeSeat))
-        {
-            if (PhotonNetwork.IsMasterClient)
-                StartCoroutine(BotTrumpPhase1(activeSeat, upcard, forced));
-            return; // ALL clients return — no popup shown for bot seat
-        }
-
-        if (!isMyTurn) return;
-
-        char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
-        trumpUI?.ShowPhase1(upcardSuit, canPass: !forced,
-            onOrderUp: () =>
-            {
-                turnTimer?.StopTimer();
-                photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All,
-                    _localSeat, (int)upcardSuit);
-            },
-            onPass: () =>
-            {
-                turnTimer?.StopTimer();
-                AdvanceTrumpPhase1(upcard);
-            });
     }
 
     
-
 
     private void AdvanceTrumpPhase1(string upcard)
     {
@@ -981,21 +936,18 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         turnIndicator?.SetActiveTurn(RemapSeatToPanel(activeSeat));
 
         bool isMyTurn = activeSeat == _localSeat;
-        turnTimer?.StartTimer(isLocalTurn: isMyTurn, isBot: _botSeats.Contains(activeSeat));
-
         bool isDealer = activeSeat == _dealerSeat;
-        bool forced = isDealer;
+        bool forced   = isDealer; // dealer MUST pick in phase 2
 
         SetStatus(isMyTurn
             ? "Choose trump suit"
-            : $"{SeatName(activeSeat)} is choosing...");
+            : $"{_seatToName.GetValueOrDefault(activeSeat, "Player")} is choosing...");
 
-        // ── MASTER CLIENT ONLY handles bot trump decision ─────────────
-        if (_botSeats.Contains(activeSeat))
+        // ── Bot ───────────────────────────────────────────────────
+        if (_botSeats.Contains(activeSeat) && PhotonNetwork.IsMasterClient)
         {
-            if (PhotonNetwork.IsMasterClient)
-                StartCoroutine(BotTrumpPhase2(activeSeat, excludedSuit, forced));
-            return; // ALL clients return
+            StartCoroutine(BotTrumpPhase2(activeSeat, excludedSuit, forced));
+            return;
         }
 
         if (!isMyTurn) return;
@@ -1003,13 +955,11 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         trumpUI?.ShowPhase2(excludedSuit, canPass: !forced,
             onSuitPicked: (suit) =>
             {
-                turnTimer?.StopTimer();
                 photonView.RPC(nameof(RPC_TrumpSuitChosen), RpcTarget.All,
                     _localSeat, suit.ToString());
             },
             onPass: () =>
             {
-                turnTimer?.StopTimer();
                 int next = (_turnSeat + 1) % 4;
                 photonView.RPC(nameof(RPC_TrumpPhase2Turn), RpcTarget.All,
                     next, excludedSuit);
@@ -1061,7 +1011,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     //  TRICK PLAYING
     // ─────────────────────────────────────────────────────────────
 
-    /*[PunRPC]
+    [PunRPC]
     private void RPC_BeginTurn(int activeSeat)
     {
         // Skip partner if going alone
@@ -1099,44 +1049,6 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         // Enable card selection for local player
         cardManager?.EnableCardSelection(true, _played, _trump, ALT_SUITS);
-    }*/
-
-    [PunRPC]
-    private void RPC_BeginTurn(int activeSeat)
-    {
-        if (_skipSeat != -1 && activeSeat == _skipSeat)
-        {
-            int next = (activeSeat + 1) % 4;
-            if (next == _skipSeat) next = (next + 1) % 4;
-            // Only master sends the next RPC to avoid duplicate calls
-            if (PhotonNetwork.IsMasterClient)
-                photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, next);
-            return;
-        }
-
-        _turnSeat = activeSeat;
-
-        turnIndicator?.SetActiveTurn(RemapSeatToPanel(activeSeat));
-
-        bool isMyTurn = activeSeat == _localSeat;
-        turnTimer?.StartTimer(isLocalTurn: isMyTurn, isBot: _botSeats.Contains(activeSeat));
-
-        SetStatus(isMyTurn
-            ? "Your turn — select a card"
-            : $"{SeatName(activeSeat)}'s turn...");
-
-        // ── MASTER CLIENT ONLY handles bot turns ──────────────────────
-        if (_botSeats.Contains(activeSeat))
-        {
-            if (PhotonNetwork.IsMasterClient)
-                StartCoroutine(BotPlayCard(activeSeat));
-            return; // ALL clients return here — no human input for bot seat
-        }
-
-        // ── Human turn — only the local player whose seat it is ───────
-        if (!isMyTurn) return;
-
-        cardManager?.EnableCardSelection(true, _played, _trump, ALT_SUITS);
     }
 
     /// <summary>Called by EuchreCardManager when local player confirms a card.</summary>
@@ -1152,7 +1064,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         photonView.RPC(nameof(RPC_CardPlayed), RpcTarget.All, _localSeat, cardType);
     }
 
-    /*[PunRPC]
+    [PunRPC]
     private void RPC_CardPlayed(int fromSeat, string cardType)
     {
         
@@ -1183,75 +1095,6 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
                 next = (next + 1) % 4;
 
             photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, next);
-        }
-    }*/
-
-    [PunRPC]
-    private void RPC_CardPlayed(int fromSeat, string cardType)
-    {
-        // Guard: ignore duplicate plays for the same seat in same trick
-        if (_trickOrder.Contains(fromSeat))
-        {
-            Debug.LogWarning($"[Network] Duplicate card play ignored from seat {fromSeat}");
-            return;
-        }
-
-        turnTimer?.StopTimer();
-        turnIndicator?.SetActiveTurn(-1);
-
-        _played.Add(cardType);
-        _trickOrder.Add(fromSeat);
-
-        int panelIdx = RemapSeatToPanel(fromSeat);
-        cardManager?.FlyCardsToWinner(panelIdx, null); // placeholder — actual fly on trick end
-        cardManager?.AnimateCardToTable(panelIdx, cardType);
-
-        int numPlaying = _skipSeat != -1 ? 3 : 4;
-
-        if (_played.Count >= numPlaying)
-        {
-            SetState(GameState.ScoringTrick);
-            if (PhotonNetwork.IsMasterClient)
-                StartCoroutine(DelayThen(ScoreTrick, 1.5f));
-        }
-        else
-        {
-            int next = (fromSeat + 1) % 4;
-            if (_skipSeat != -1 && next == _skipSeat)
-                next = (next + 1) % 4;
-
-            if (PhotonNetwork.IsMasterClient)
-                photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, next);
-        }
-    }
-
-    /// <summary>
-    /// Called by TurnTimerController when a bot's timer expires.
-    /// Master client only.
-    /// </summary>
-    public void ForceBotPlay(int botSeat)
-    {
-        if (!PhotonNetwork.IsMasterClient) return;
-        if (!_botSeats.Contains(botSeat)) return;
-
-        Debug.Log($"[Network] Force bot play for seat {botSeat}");
-
-        // Check which phase we are in
-        if (_state == GameState.Playing)
-        {
-            StartCoroutine(BotPlayCard(botSeat));
-        }
-        else if (_state == GameState.TrumpPhase1)
-        {
-            string upcard = _deck.Count > 0 ? _deck[0] : "9C";
-            bool forced = true; // timer expired = forced
-            StartCoroutine(BotTrumpPhase1(botSeat, upcard, forced));
-        }
-        else if (_state == GameState.TrumpPhase2)
-        {
-            string excluded = _deck.Count > 0 && _deck[0].Length > 1
-                ? _deck[0][1].ToString() : "S";
-            StartCoroutine(BotTrumpPhase2(botSeat, excluded, forced: true));
         }
     }
 
