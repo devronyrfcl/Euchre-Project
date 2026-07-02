@@ -50,6 +50,8 @@ public class EuchreCardManager : MonoBehaviour
          "Index 0=me, 1=partner, 2=left, 3=right")]
     [SerializeField] private RectTransform[] playerPanelRects = new RectTransform[4];
 
+    [SerializeField] private GameObject turnWinParticle;
+
 
     // ─────────────────────────────────────────────────────────────
     //  Deal Source Positions (canvas anchored positions)
@@ -578,6 +580,29 @@ public class EuchreCardManager : MonoBehaviour
     public void FlyCardsToWinner(int winnerPanelIndex, Action onComplete = null)
     {
         StartCoroutine(FlyCardsToWinnerCoroutine(winnerPanelIndex, onComplete));
+        // spawn win particle at canvas in winnerpanel position and then distroy it after 5 seconds
+        if (turnWinParticle != null && winnerPanelIndex >= 0 && winnerPanelIndex < playerPanelRects.Length)
+        {
+            RectTransform winnerPanel = playerPanelRects[winnerPanelIndex];
+            if (winnerPanel != null)
+            {
+                GameObject particleObj = Instantiate(turnWinParticle, gameCanvas.transform);
+                RectTransform particleRt = particleObj.GetComponent<RectTransform>();
+                // Convert winner panel world position to canvas local position
+                Vector3[] corners = new Vector3[4];
+                winnerPanel.GetWorldCorners(corners);
+                Vector3 worldCenter = (corners[0] + corners[2]) / 2f;
+                Vector2 localPos;
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    gameCanvas.GetComponent<RectTransform>(),
+                    RectTransformUtility.WorldToScreenPoint(null, worldCenter),
+                    null,
+                    out localPos);
+                particleRt.anchoredPosition = localPos;
+                Destroy(particleObj, 5f); // destroy after 5 seconds
+            }
+        }
+
     }
 
     private IEnumerator FlyCardsToWinnerCoroutine(int winnerPanelIndex, Action onComplete)
@@ -641,6 +666,9 @@ public class EuchreCardManager : MonoBehaviour
             // Fallback — fly to center
             return Vector2.zero;
         }
+
+        
+
 
         RectTransform panelRt = playerPanelRects[panelIndex];
 

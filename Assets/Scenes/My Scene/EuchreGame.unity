@@ -12154,6 +12154,7 @@ MonoBehaviour:
   - {fileID: 167339643}
   - {fileID: 1946635193}
   - {fileID: 582381994}
+  turnWinParticle: {fileID: 2887824603362791690, guid: 669ced2e9e17d8f4aa2176ba2f0c3a13, type: 3}
 --- !u!114 &1354523851
 MonoBehaviour:
   m_ObjectHideFlags: 0
