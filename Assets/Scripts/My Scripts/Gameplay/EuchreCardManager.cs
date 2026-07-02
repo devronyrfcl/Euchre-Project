@@ -18,6 +18,9 @@ public class EuchreCardManager : MonoBehaviour
     //  Inspector References
     // ─────────────────────────────────────────────────────────────
 
+    // Add singleton at top of class
+    public static EuchreCardManager Instance { get; private set; }
+
     [Header("=== CANVAS ===")]
     [SerializeField] private Canvas      gameCanvas;
     [SerializeField] private RectTransform cardHolder; // "PlayerCardHolder" object
@@ -31,6 +34,9 @@ public class EuchreCardManager : MonoBehaviour
     [SerializeField] private List<Sprite> cardSprites = new List<Sprite>();
     [SerializeField] private Sprite       cardBackSprite;
 
+    [Header("=== PLAY BUTTON ===")]
+    [SerializeField] private GameObject playCardButton; // assign in Inspector
+
     // ─────────────────────────────────────────────────────────────
     //  Deal Source Positions (canvas anchored positions)
     //  Index 0 = local (me), 1 = partner, 2 = left, 3 = right
@@ -38,6 +44,8 @@ public class EuchreCardManager : MonoBehaviour
 
     // Where shuffle cards FLY TO for each player
     // "Throw" destination per player panel
+
+    
     private static readonly Vector2[] DEAL_THROW_POSITIONS = new Vector2[]
     {
         new Vector2(   0f,    0f),   // Seat 0 — me (not used as throw target, cards go to hand)
@@ -70,16 +78,17 @@ public class EuchreCardManager : MonoBehaviour
 
     private static readonly Vector2[] HAND_POSITIONS = new Vector2[]
     {
-        new Vector2(-77f,   -11f),
-        new Vector2(-46.3f, -11f),
+        
+        new Vector2(-54.9f, 0.8f),
         new Vector2( -2f,    11.85f),
         new Vector2( 36f,    11.45f),
-        new Vector2( 73f,     4.95f)
+        new Vector2( 73f,     4.95f),
+        new Vector2(103.2f, -10.1f)
     };
 
     private static readonly float[] HAND_ROTATIONS_Z = new float[]
     {
-        34f, 17.35f, 6.48f, -4.76f, -20.2f
+        17.35f, 6.48f, -4.76f, -20.2f, -34f
     };
 
     private static readonly Vector2 HAND_CARD_SIZE = new Vector2(120f, 165f);
@@ -112,6 +121,8 @@ public class EuchreCardManager : MonoBehaviour
 
     private void Awake()
     {
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        Instance = this;
         BuildSpriteMap();
     }
 
@@ -348,8 +359,14 @@ public class EuchreCardManager : MonoBehaviour
         _currentTrump        = trump;
         _currentAltSuits     = altSuits;
 
+        Debug.Log($"[CardManager] EnableCardSelection={enabled} HandCount={_handCards.Count}");
+
         foreach (EuchreCardUI card in _handCards)
             if (card != null) card.SetInteractable(enabled);
+
+        // Show/hide play button with turn state
+        if (playCardButton != null)
+            playCardButton.SetActive(enabled);
     }
 
     /// <summary>Called by EuchreCardUI when local player taps a card.</summary>
@@ -368,31 +385,57 @@ public class EuchreCardManager : MonoBehaviour
     /// <summary>Called by Play button — plays the selected card.</summary>
     public void ConfirmPlaySelectedCard()
     {
-        if (!_selectionEnabled) return;
+        // DEBUG — remove after fixing
+        Debug.Log($"[CardManager] ConfirmPlay called. SelectionEnabled={_selectionEnabled} " +
+                $"HandCards={_handCards.Count}");
+
+        if (!_selectionEnabled)
+        {
+            Debug.LogWarning("[CardManager] Selection not enabled — not your turn yet.");
+            return;
+        }
 
         EuchreCardUI selected = null;
         foreach (EuchreCardUI card in _handCards)
-            if (card != null && card.IsSelected) { selected = card; break; }
+        {
+            if (card != null && card.IsSelected)
+            {
+                selected = card;
+                break;
+            }
+        }
 
-        if (selected == null) return;
+        if (selected == null)
+        {
+            Debug.LogWarning("[CardManager] No card selected.");
+            return;
+        }
 
-        // Validate follow-suit
         if (!IsValidPlay(selected.CardType))
         {
-            Debug.Log("[CardManager] Must follow suit.");
+            Debug.LogWarning("[CardManager] Invalid play — must follow suit.");
+            // Optional: show message to player
             return;
         }
 
         string cardType = selected.CardType;
 
-        // Remove from hand display
+        _selectionEnabled = false;
+
+        // Disable all cards
+        foreach (EuchreCardUI card in _handCards)
+            if (card != null) card.SetInteractable(false);
+
+        // Remove from hand
         _handCards.Remove(selected);
         Destroy(selected.gameObject);
 
         // Notify network
-        GameplayNetworkManager.Instance?.LocalPlayCard(cardType);
+        if (GameplayNetworkManager.Instance != null)
+            GameplayNetworkManager.Instance.LocalPlayCard(cardType);
+        else
+            Debug.LogError("[CardManager] GameplayNetworkManager.Instance is null!");
     }
-
     private bool IsValidPlay(string cardType)
     {
         if (_currentPlayedCards == null || _currentPlayedCards.Count == 0) return true;
@@ -506,5 +549,41 @@ public class EuchreCardManager : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
         if (obj != null) Destroy(obj);
+    }
+    // Add this method at the bottom of the class
+    /// <summary>Called by TurnTimerController when time runs out on local turn.</summary>
+    public void AutoPlayFirstValidCard()
+    {
+        if (!_selectionEnabled || _handCards.Count == 0) return;
+
+        // Find first valid card
+        EuchreCardUI toPlay = null;
+        foreach (EuchreCardUI card in _handCards)
+        {
+            if (card == null) continue;
+            if (IsValidPlay(card.CardType))
+            {
+                toPlay = card;
+                break;
+            }
+        }
+
+        if (toPlay == null && _handCards.Count > 0)
+            toPlay = _handCards[0]; // fallback — play first card regardless
+
+        if (toPlay == null) return;
+
+        Debug.Log($"[CardManager] Auto-playing: {toPlay.CardType}");
+
+        string cardType   = toPlay.CardType;
+        _selectionEnabled = false;
+
+        foreach (EuchreCardUI card in _handCards)
+            if (card != null) card.SetInteractable(false);
+
+        _handCards.Remove(toPlay);
+        Destroy(toPlay.gameObject);
+
+        GameplayNetworkManager.Instance?.LocalPlayCard(cardType);
     }
 }

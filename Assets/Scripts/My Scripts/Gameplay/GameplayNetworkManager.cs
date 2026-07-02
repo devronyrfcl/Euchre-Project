@@ -43,6 +43,15 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [Header("=== STATUS ===")]
     [SerializeField] private TMPro.TMP_Text statusText;
 
+    [Header("=== TURN INDICATOR ===")]
+    [SerializeField] private TurnIndicatorController turnIndicator;
+
+    // Add field at top
+    [Header("=== TIMER ===")]
+    [SerializeField] private TurnTimerController turnTimer;
+
+    [Header("=== SCORE DISPLAY ===")]
+    [SerializeField] private TrickScoreDisplay trickDisplay;
     // ─────────────────────────────────────────────────────────────
     //  Photon Property Keys
     // ─────────────────────────────────────────────────────────────
@@ -531,6 +540,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         playFabManager.SetDealer(RemapSeatToPanel(dealerSeat));
         playFabManager.ClearTrump();
 
+        trickDisplay?.ResetTricks(_team1Score, _team2Score);
+
+
         if (PhotonNetwork.IsMasterClient)
             DealCards();
     }
@@ -677,6 +689,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_TrumpOrdered(int pickerSeat, int suitInt)
     {
+        
+        turnTimer?.StopTimer();
         char suit        = (char)suitInt;
         _trump           = suit;
         _trumpPickerSeat = pickerSeat;
@@ -715,6 +729,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private void RPC_TrumpPhase2Turn(int activeSeat, string excludedSuit)
     {
         _turnSeat = activeSeat;
+
+        turnIndicator?.SetActiveTurn(RemapSeatToPanel(activeSeat));
 
         bool isMyTurn = activeSeat == _localSeat;
         bool isDealer = activeSeat == _dealerSeat;
@@ -806,6 +822,13 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         _turnSeat = activeSeat;
 
+        turnIndicator?.SetActiveTurn(RemapSeatToPanel(activeSeat));
+
+        // ADD THIS
+        bool isLocalTurn = activeSeat == _localSeat;
+        turnTimer?.StartTimer(isLocalTurn);
+
+
         bool isMyTurn = activeSeat == _localSeat;
 
         SetStatus(isMyTurn
@@ -841,6 +864,11 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_CardPlayed(int fromSeat, string cardType)
     {
+        
+        // ADD THIS at the very top
+        turnTimer?.StopTimer();
+
+        
         _played.Add(cardType);
 
         // Track trick order
@@ -903,6 +931,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_TrickWon(int winnerSeat)
     {
+        turnIndicator?.SetActiveTurn(-1);
+        
         if (winnerSeat % 2 == 0) _team1Tricks++;
         else                      _team2Tricks++;
 
@@ -910,6 +940,12 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _trickOrder.Clear();
 
         cardManager?.ClearTableCards();
+
+        // ADD THIS
+        trickDisplay?.UpdateTrickScore(
+            _team1Tricks, _team2Tricks,
+            _team1Score,  _team2Score,
+            _isTeamMode);
 
         int totalTricks = _team1Tricks + _team2Tricks;
 

@@ -72,21 +72,78 @@ public class GameplayPlayFabManager : MonoBehaviour
 
     private void SetupLocalPlayer()
     {
-        MatchPlayerData local = _config.localPlayer;
+        MatchPlayerData local = _config?.localPlayer;
 
-        if (playerPanels[0] != null)
+        if (local == null)
         {
-            playerPanels[0].Setup(
-                local.playFabId,
-                local.displayName,
-                local.pokerChips,
-                seat: 0,
-                isBot: false);
-
-            playerPanels[0].LoadAvatar(local.avatarUrl);
+            Debug.LogError("[GameplayPlayFabManager] No local player data in config.");
+            return;
         }
 
-        Debug.Log($"[GameplayPlayFabManager] Local player set up: {local.displayName}");
+        if (playerPanels[0] == null)
+        {
+            Debug.LogError("[GameplayPlayFabManager] playerPanels[0] not assigned.");
+            return;
+        }
+
+        // Set name and PC from config immediately so panel isn't blank
+        playerPanels[0].Setup(
+            local.playFabId,
+            local.displayName,
+            local.pokerChips,
+            seat: 0,
+            isBot: false);
+
+        // Then fetch fresh name + avatar directly from PlayFab
+        // This is the only reliable source — config URL may be stale or empty
+        FetchAndApplyLocalProfile();
+    }
+
+    private void FetchAndApplyLocalProfile()
+    {
+        PlayFabClientAPI.GetPlayerProfile(
+            new GetPlayerProfileRequest
+            {
+                ProfileConstraints = new PlayerProfileViewConstraints
+                {
+                    ShowDisplayName = true,
+                    ShowAvatarUrl   = true
+                }
+            },
+            result =>
+            {
+                if (playerPanels[0] == null) return;
+
+                string displayName = result.PlayerProfile?.DisplayName;
+                string avatarUrl   = result.PlayerProfile?.AvatarUrl;
+
+                // Override name if PlayFab returned one
+                if (!string.IsNullOrEmpty(displayName))
+                {
+                    playerPanels[0].Setup(
+                        _config.localPlayer.playFabId,
+                        displayName,
+                        _config.localPlayer.pokerChips,
+                        seat: 0,
+                        isBot: false);
+                }
+
+                // Load avatar — prefer PlayFab, fall back to config
+                string urlToLoad = !string.IsNullOrEmpty(avatarUrl)
+                    ? avatarUrl
+                    : _config.localPlayer.avatarUrl;
+
+                playerPanels[0].LoadAvatar(urlToLoad);
+            },
+            error =>
+            {
+                Debug.LogWarning("[GameplayPlayFabManager] Profile fetch failed: "
+                            + error.GenerateErrorReport());
+
+                // Fall back to whatever config has
+                if (playerPanels[0] != null)
+                    playerPanels[0].LoadAvatar(_config.localPlayer.avatarUrl);
+            });
     }
 
     // ─────────────────────────────────────────────────────────────
