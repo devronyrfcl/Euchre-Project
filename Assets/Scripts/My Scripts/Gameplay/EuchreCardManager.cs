@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
+using Lean.Gui;
+using System;
 
 /// <summary>
 /// Manages all card visuals in the gameplay scene.
@@ -24,6 +27,7 @@ public class EuchreCardManager : MonoBehaviour
     [Header("=== CANVAS ===")]
     [SerializeField] private Canvas      gameCanvas;
     [SerializeField] private RectTransform cardHolder; // "PlayerCardHolder" object
+    [SerializeField] private RectTransform shufflecardHolder;
 
     [Header("=== PREFABS ===")]
     [SerializeField] private GameObject shuffleCardPrefab;  // backside card for dealing anim
@@ -37,6 +41,16 @@ public class EuchreCardManager : MonoBehaviour
     [Header("=== PLAY BUTTON ===")]
     [SerializeField] private GameObject playCardButton; // assign in Inspector
 
+    [Header("=== Error Panel ===")]
+    [SerializeField] private TMP_Text errorText; // assign in Inspector
+    [SerializeField] private LeanWindow errorPanel; // assign in Inspector
+
+    [Header("=== PLAYER PANEL POSITIONS ===")]
+    [Tooltip("Assign the RectTransform of each player panel root. " +
+         "Index 0=me, 1=partner, 2=left, 3=right")]
+    [SerializeField] private RectTransform[] playerPanelRects = new RectTransform[4];
+
+
     // ─────────────────────────────────────────────────────────────
     //  Deal Source Positions (canvas anchored positions)
     //  Index 0 = local (me), 1 = partner, 2 = left, 3 = right
@@ -45,7 +59,7 @@ public class EuchreCardManager : MonoBehaviour
     // Where shuffle cards FLY TO for each player
     // "Throw" destination per player panel
 
-    
+
     private static readonly Vector2[] DEAL_THROW_POSITIONS = new Vector2[]
     {
         new Vector2(   0f,    0f),   // Seat 0 — me (not used as throw target, cards go to hand)
@@ -217,7 +231,7 @@ public class EuchreCardManager : MonoBehaviour
 
     private void SpawnShuffleCard(Vector2 from, Vector2 to)
     {
-        GameObject obj = Instantiate(shuffleCardPrefab, gameCanvas.transform);
+        GameObject obj = Instantiate(shuffleCardPrefab, shufflecardHolder);
         RectTransform rt = obj.GetComponent<RectTransform>();
         rt.anchoredPosition = from;
         rt.localScale       = Vector3.one;
@@ -233,7 +247,7 @@ public class EuchreCardManager : MonoBehaviour
     {
         if (_upcardObj != null) Destroy(_upcardObj);
 
-        _upcardObj = Instantiate(shuffleCardPrefab, gameCanvas.transform);
+        _upcardObj = Instantiate(shuffleCardPrefab, shufflecardHolder);
         RectTransform rt = _upcardObj.GetComponent<RectTransform>();
         rt.anchoredPosition = new Vector2(0f, 20f); // center table
 
@@ -317,6 +331,7 @@ public class EuchreCardManager : MonoBehaviour
             });
     }
 
+    // Adds a card to the local player's hand visually after dealer picks up the upcard
     private IEnumerator AddCardToHand(string cardType)
     {
         yield return new WaitForSeconds(0.1f);
@@ -354,7 +369,20 @@ public class EuchreCardManager : MonoBehaviour
     public void EnableCardSelection(bool enabled, List<string> playedCards,
                                      char trump, Dictionary<char, char> altSuits)
     {
-        _selectionEnabled    = enabled;
+        //playable card holder pos will be -56 on y axis when it's not your turn, and 0 when it is your turn
+        if (enabled)
+            cardHolder.DOAnchorPosY(0f, 0.3f).SetEase(Ease.OutCubic);
+        else
+            cardHolder.DOAnchorPosY(-56f, 0.3f).SetEase(Ease.OutCubic);
+
+        if (playedCards != null)
+            Debug.Log($"[CardManager] EnableCardSelection called. Enabled={enabled} " +
+                      $"PlayedCards={string.Join(",", playedCards)} Trump={trump} AltSuits={altSuits}");
+        if (altSuits != null)
+            Debug.Log($"[CardManager] AltSuits: {string.Join(",", altSuits)}");
+
+
+        _selectionEnabled = enabled;
         _currentPlayedCards  = playedCards;
         _currentTrump        = trump;
         _currentAltSuits     = altSuits;
@@ -392,6 +420,11 @@ public class EuchreCardManager : MonoBehaviour
         if (!_selectionEnabled)
         {
             Debug.LogWarning("[CardManager] Selection not enabled — not your turn yet.");
+
+            // Optional: show message to player
+            errorText.text = "It's not your turn yet!";
+            if (errorPanel != null)
+                errorPanel.TurnOn();
             return;
         }
 
@@ -408,6 +441,10 @@ public class EuchreCardManager : MonoBehaviour
         if (selected == null)
         {
             Debug.LogWarning("[CardManager] No card selected.");
+            // Optional: show message to player
+            errorText.text = "Please select a card to play.";
+            if (errorPanel != null)
+                errorPanel.TurnOn();
             return;
         }
 
@@ -415,6 +452,9 @@ public class EuchreCardManager : MonoBehaviour
         {
             Debug.LogWarning("[CardManager] Invalid play — must follow suit.");
             // Optional: show message to player
+            errorText.text = "Invalid play! You must follow suit.";
+            if (errorPanel != null)
+                errorPanel.TurnOn();
             return;
         }
 
@@ -480,7 +520,7 @@ public class EuchreCardManager : MonoBehaviour
     /// </summary>
     public void AnimateCardToTable(int panelIndex, string cardType)
     {
-        GameObject obj = Instantiate(shuffleCardPrefab, gameCanvas.transform);
+        GameObject obj = Instantiate(shuffleCardPrefab, shufflecardHolder);
         RectTransform rt = obj.GetComponent<RectTransform>();
 
         // Start from player's panel position
@@ -489,7 +529,7 @@ public class EuchreCardManager : MonoBehaviour
             : DEAL_THROW_POSITIONS[panelIndex];
 
         rt.anchoredPosition = startPos;
-        rt.sizeDelta        = new Vector2(67.1137f, 91.4f);
+        rt.sizeDelta        = new Vector2(56f, 76f);
         rt.localRotation    = Quaternion.Euler(TABLE_CARD_ROTATION);
 
         // Show front face
@@ -508,23 +548,119 @@ public class EuchreCardManager : MonoBehaviour
 
     public void ClearTableCards()
     {
+        // Default clear — just destroys. 
+        // Use FlyCardsToWinner() instead when a winner is known.
         StartCoroutine(ClearTableCoroutine());
     }
 
     private IEnumerator ClearTableCoroutine()
     {
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(0.3f);
 
         foreach (GameObject c in _tableCards)
         {
             if (c == null) continue;
             RectTransform rt = c.GetComponent<RectTransform>();
             if (rt != null)
-                rt.DOScale(Vector3.zero, 0.2f).SetEase(Ease.InBack)
+                rt.DOScale(Vector3.zero, 0.2f)
+                    .SetEase(Ease.InBack)
                     .OnComplete(() => { if (c != null) Destroy(c); });
         }
-
         _tableCards.Clear();
+    }
+
+
+    /// <summary>
+    /// Called by GameplayNetworkManager after trick winner is decided.
+    /// All 4 table cards fly to the winning player's panel position,
+    /// then vanish. winnerPanelIndex: 0=me, 1=partner, 2=left, 3=right.
+    /// </summary>
+    public void FlyCardsToWinner(int winnerPanelIndex, Action onComplete = null)
+    {
+        StartCoroutine(FlyCardsToWinnerCoroutine(winnerPanelIndex, onComplete));
+    }
+
+    private IEnumerator FlyCardsToWinnerCoroutine(int winnerPanelIndex, Action onComplete)
+    {
+        if (_tableCards.Count == 0)
+        {
+            onComplete?.Invoke();
+            yield break;
+        }
+
+        // Get winner panel world position converted to canvas space
+        Vector2 targetPos = GetWinnerCanvasPosition(winnerPanelIndex);
+
+        // Small delay so player can see the played cards before they fly
+        yield return new WaitForSeconds(0.6f);
+
+        float flyDuration = 0.35f;
+        float delayPerCard = 0.04f;
+
+        List<GameObject> cardsToFly = new List<GameObject>(_tableCards);
+        _tableCards.Clear();
+
+        for (int i = 0; i < cardsToFly.Count; i++)
+        {
+            GameObject card = cardsToFly[i];
+            if (card == null) continue;
+
+            RectTransform rt = card.GetComponent<RectTransform>();
+            if (rt == null) continue;
+
+            // Fly card to winner panel
+            rt.DOAnchorPos(targetPos, flyDuration)
+                .SetEase(Ease.InCubic)
+                .SetDelay(i * delayPerCard);
+
+            // Shrink and fade as it arrives
+            rt.DOScale(Vector3.zero, flyDuration * 0.5f)
+                .SetEase(Ease.InBack)
+                .SetDelay(i * delayPerCard + flyDuration * 0.6f);
+
+            // Destroy after animation
+            float destroyDelay = flyDuration + delayPerCard * i + 0.1f;
+            StartCoroutine(DestroyAfter(card, destroyDelay));
+        }
+
+        // Wait for all cards to finish flying
+        float totalDuration = flyDuration
+            + delayPerCard * (cardsToFly.Count - 1)
+            + 0.15f;
+
+        yield return new WaitForSeconds(totalDuration);
+
+        onComplete?.Invoke();
+    }
+
+    private Vector2 GetWinnerCanvasPosition(int panelIndex)
+    {
+        if (panelIndex < 0 || panelIndex >= playerPanelRects.Length
+            || playerPanelRects[panelIndex] == null)
+        {
+            // Fallback — fly to center
+            return Vector2.zero;
+        }
+
+        RectTransform panelRt = playerPanelRects[panelIndex];
+
+        // Convert panel world corners to canvas local position
+        Vector3[] corners = new Vector3[4];
+        panelRt.GetWorldCorners(corners);
+
+        // Center of panel in world space
+        Vector3 worldCenter = (corners[0] + corners[2]) / 2f;
+
+        // Convert to canvas local position
+        RectTransform canvasRt = gameCanvas.GetComponent<RectTransform>();
+        Vector2 localPos;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            canvasRt,
+            RectTransformUtility.WorldToScreenPoint(null, worldCenter),
+            null,
+            out localPos);
+
+        return localPos;
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -75,6 +75,11 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         Playing, ScoringTrick, HandOver, MatchOver
     }
 
+    private string SeatName(int seat)
+    {
+        return _seatToName.ContainsKey(seat) ? _seatToName[seat] : $"Player {seat + 1}";
+    }
+
     // ─────────────────────────────────────────────────────────────
     //  Runtime State
     // ─────────────────────────────────────────────────────────────
@@ -121,7 +126,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private List<int>   _botSeats       = new List<int>();
     private Coroutine   _botFillRoutine;
 
-    private static readonly string[] BOT_NAMES = { "Bot Alpha", "Bot Beta", "Bot Gamma" };
+    private static readonly string[] BOT_NAMES = { "Jusef", "Opu", "Monir" };
 
     private static readonly string[] CARD_TYPES = { "9","T","J","Q","K","A" };
     private static readonly string[] CARD_SUITS = { "C","D","H","S" };
@@ -261,6 +266,50 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             _config.localPlayer.displayName,
             _config.localPlayer.avatarUrl,
             _config.localPlayer.pokerChips);
+
+        // ── FIX: load existing players already in the room ──────────
+        StartCoroutine(LoadExistingPlayersInRoom());
+    }
+
+    private IEnumerator LoadExistingPlayersInRoom()
+    {
+        // Wait for seat assignment RPC to come back first
+        yield return new WaitForSeconds(0.5f);
+
+        foreach (Player player in PhotonNetwork.PlayerList)
+        {
+            // Skip self
+            if (player.ActorNumber == PhotonNetwork.LocalPlayer.ActorNumber) continue;
+
+            object seatObj, pfIdObj, nameObj, pcObj, avatarObj, botObj;
+
+            if (!player.CustomProperties.TryGetValue(PROP_SEAT, out seatObj)) continue;
+            if (!player.CustomProperties.TryGetValue(PROP_PLAYFAB_ID, out pfIdObj)) continue;
+            if (!player.CustomProperties.TryGetValue(PROP_DISPLAY_NAME, out nameObj)) continue;
+            if (!player.CustomProperties.TryGetValue(PROP_POKER_CHIPS, out pcObj)) continue;
+
+            player.CustomProperties.TryGetValue(PROP_AVATAR_URL, out avatarObj);
+            player.CustomProperties.TryGetValue(PROP_IS_BOT, out botObj);
+
+            int seat = (int)seatObj;
+            string playFabId = pfIdObj?.ToString() ?? "";
+            string displayName = nameObj?.ToString() ?? "Player";
+            int pokerChips = pcObj is int pc ? pc : 0;
+            string avatarUrl = avatarObj?.ToString() ?? "";
+            bool isBot = botObj is bool b && b;
+
+            int panelIdx = RemapSeatToPanel(seat);
+
+            // Show immediately
+            playFabManager?.SetupOtherPlayer(
+                panelIdx, playFabId, displayName, pokerChips, avatarUrl, isBot);
+
+            // Then fetch fresh avatar and name from PlayFab
+            if (!isBot)
+                RefreshOtherPlayerPanel(panelIdx, playFabId, displayName, pokerChips);
+
+            Debug.Log($"[Network] Loaded existing player: {displayName} at seat {seat}");
+        }
     }
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
@@ -318,7 +367,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         }
     }
 
-    [PunRPC]
+    /*[PunRPC]
     private void RPC_SeatConfirmed(int actorNumber, int seat,
                                     string playFabId, string displayName,
                                     string avatarUrl, int pokerChips, bool isBot)
@@ -355,6 +404,156 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         int totalSeated = _takenSeats.Count + _botSeats.Count;
         SetStatus($"Waiting for players ({totalSeated}/4)...");
+    }*/
+
+    [PunRPC]
+    private void RPC_SeatConfirmed(int actorNumber, int seat,
+                                string playFabId, string displayName,
+                                string avatarUrl, int pokerChips, bool isBot)
+    {
+        _seatToActor[seat] = actorNumber;
+        _seatToName[seat] = displayName;
+
+        bool isLocalPlayer = actorNumber == PhotonNetwork.LocalPlayer.ActorNumber;
+
+        if (isLocalPlayer)
+        {
+            AssignLocalSeat(seat);
+            if (!_takenSeats.Contains(seat)) _takenSeats.Add(seat);
+        }
+        else if (isBot)
+        {
+            if (!_botSeats.Contains(seat)) _botSeats.Add(seat);
+        }
+        else
+        {
+            if (!_takenSeats.Contains(seat)) _takenSeats.Add(seat);
+        }
+
+        // ── FIX: always update panel for non-local players ──────────
+        if (!isLocalPlayer)
+        {
+            int panelIdx = RemapSeatToPanel(seat);
+
+            // Immediately set name and PC from RPC data (available instantly)
+            playFabManager?.SetupOtherPlayer(
+                panelIdx, playFabId, displayName, pokerChips, avatarUrl, isBot);
+
+            // Then refresh from PlayFab for accurate name + avatar
+            // (RPC data is reliable but avatar needs a fresh fetch)
+            if (!isBot)
+                RefreshOtherPlayerPanel(panelIdx, playFabId, displayName, pokerChips);
+        }
+
+        teamVoteUI?.SetVoteIcon(RemapSeatToPanel(seat), voted: false, yes: false);
+
+        int totalSeated = _takenSeats.Count + _botSeats.Count;
+        SetStatus($"Waiting for players ({totalSeated}/4)...");
+    }
+
+
+
+    /// <summary>
+    /// Fetches fresh profile data from PlayFab for a non-local player
+    /// and updates their panel. Called every time a player joins.
+    /// </summary>
+    private void RefreshOtherPlayerPanel(int panelIdx, string playFabId,
+                                          string fallbackName, int fallbackPC)
+    {
+        PlayFab.PlayFabClientAPI.ExecuteCloudScript(
+            new PlayFab.ClientModels.ExecuteCloudScriptRequest
+            {
+                FunctionName = "GetGameplayPlayerProfile",
+                FunctionParameter = new { playFabId = playFabId },
+                GeneratePlayStreamEvent = false
+            },
+            result =>
+            {
+                if (result.FunctionResult == null) return;
+
+                string json = Newtonsoft.Json.JsonConvert
+                    .SerializeObject(result.FunctionResult);
+
+                CloudProfileResult profile = Newtonsoft.Json.JsonConvert
+                    .DeserializeObject<CloudProfileResult>(json);
+
+                if (profile == null) return;
+
+                GameplayPlayerData panel = playFabManager?.GetPlayerPanel(panelIdx);
+                if (panel == null) return;
+
+                // Use CloudScript result — more reliable than RPC payload
+                string finalName = !string.IsNullOrEmpty(profile.displayName)
+                    ? profile.displayName : fallbackName;
+                string finalAvatar = profile.avatarUrl ?? "";
+
+                panel.Setup(playFabId, finalName, fallbackPC,
+                    seat: panelIdx, isBot: false);
+
+                panel.LoadAvatar(finalAvatar);
+
+                Debug.Log($"[Network] Panel {panelIdx} refreshed: {finalName}");
+            },
+            error =>
+            {
+                Debug.LogWarning($"[Network] RefreshOtherPlayerPanel failed for panel " +
+                                 $"{panelIdx}: {error.GenerateErrorReport()}");
+            });
+    }
+
+    // Add this private class inside GameplayNetworkManager
+    // if it doesn't exist already
+    [System.Serializable]
+    private class CloudProfileResult
+    {
+        public string displayName;
+        public string avatarUrl;
+    }
+
+    public override void OnPlayerEnteredRoom(Player newPlayer)
+    {
+        Debug.Log($"[Network] Player entered: {newPlayer.NickName}");
+
+        // Read their properties — Photon may need a moment to sync them
+        // so we wait one frame before reading
+        StartCoroutine(RefreshNewPlayerAfterDelay(newPlayer));
+    }
+
+    private IEnumerator RefreshNewPlayerAfterDelay(Player newPlayer)
+    {
+        // Wait two frames for Photon to sync custom properties
+        yield return null;
+        yield return null;
+
+        object seatObj, pfIdObj, nameObj, avatarObj, pcObj, botObj;
+
+        if (!newPlayer.CustomProperties.TryGetValue(PROP_SEAT, out seatObj)) yield break;
+        if (!newPlayer.CustomProperties.TryGetValue(PROP_PLAYFAB_ID, out pfIdObj)) yield break;
+        if (!newPlayer.CustomProperties.TryGetValue(PROP_DISPLAY_NAME, out nameObj)) yield break;
+        if (!newPlayer.CustomProperties.TryGetValue(PROP_POKER_CHIPS, out pcObj)) yield break;
+
+        newPlayer.CustomProperties.TryGetValue(PROP_AVATAR_URL, out avatarObj);
+        newPlayer.CustomProperties.TryGetValue(PROP_IS_BOT, out botObj);
+
+        int seat = (int)seatObj;
+        string playFabId = pfIdObj?.ToString() ?? "";
+        string displayName = nameObj?.ToString() ?? "Player";
+        int pokerChips = pcObj is int pc ? pc : 0;
+        string avatarUrl = avatarObj?.ToString() ?? "";
+        bool isBot = botObj is bool b && b;
+
+        // Skip local player
+        if (newPlayer.ActorNumber == PhotonNetwork.LocalPlayer.ActorNumber) yield break;
+
+        int panelIdx = RemapSeatToPanel(seat);
+
+        // Immediately show name and PC
+        playFabManager?.SetupOtherPlayer(
+            panelIdx, playFabId, displayName, pokerChips, avatarUrl, isBot);
+
+        // Then fetch fresh from PlayFab
+        if (!isBot)
+            RefreshOtherPlayerPanel(panelIdx, playFabId, displayName, pokerChips);
     }
 
     private void AssignLocalSeat(int seat)
@@ -380,11 +579,13 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             int totalSeated = _takenSeats.Count + _botSeats.Count;
             if (totalSeated >= 4) yield break;
 
+            // Update status with countdown
             int remaining = Mathf.CeilToInt(wait - elapsed);
             SetStatus($"Waiting for players ({totalSeated}/4) — {remaining}s");
             yield return null;
         }
 
+        
         if (!PhotonNetwork.IsMasterClient) yield break;
         if (_takenSeats.Count + _botSeats.Count >= 4) yield break;
 
@@ -662,6 +863,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             });
     }
 
+    
+
     private void AdvanceTrumpPhase1(string upcard)
     {
         int next = (_turnSeat + 1) % 4;
@@ -928,7 +1131,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         photonView.RPC(nameof(RPC_TrickWon), RpcTarget.All, winnerSeat);
     }
 
-    [PunRPC]
+    /*[PunRPC]
     private void RPC_TrickWon(int winnerSeat)
     {
         turnIndicator?.SetActiveTurn(-1);
@@ -964,7 +1167,53 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
                 StartCoroutine(DelayThen(() =>
                     photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, winnerSeat), 0.5f));
         }
+    }*/
+
+    [PunRPC]
+    private void RPC_TrickWon(int winnerSeat)
+    {
+        turnTimer?.StopTimer();
+        turnIndicator?.SetActiveTurn(-1);
+
+        if (winnerSeat % 2 == 0) _team1Tricks++;
+        else _team2Tricks++;
+
+        _played.Clear();
+        _trickOrder.Clear();
+
+        // UPDATE: fly cards to winner instead of just clearing
+        int winnerPanelIndex = RemapSeatToPanel(winnerSeat);
+        cardManager?.FlyCardsToWinner(winnerPanelIndex, onComplete: () =>
+        {
+            // Everything that used to happen after ClearTableCards now happens
+            // inside this callback — after the animation finishes
+
+            trickDisplay?.UpdateTrickScore(
+                _team1Tricks, _team2Tricks,
+                _team1Score, _team2Score,
+                _isTeamMode);
+
+            SetStatus($"{SeatName(winnerSeat)} wins the trick!");
+
+            int totalTricks = _team1Tricks + _team2Tricks;
+
+            if (totalTricks >= 5)
+            {
+                if (PhotonNetwork.IsMasterClient)
+                    StartCoroutine(DelayThen(() =>
+                        photonView.RPC(nameof(RPC_ScoreHand), RpcTarget.All,
+                            _team1Tricks, _team2Tricks), 0.8f));
+            }
+            else
+            {
+                if (PhotonNetwork.IsMasterClient)
+                    StartCoroutine(DelayThen(() =>
+                        photonView.RPC(nameof(RPC_BeginTurn), RpcTarget.All, winnerSeat), 0.5f));
+            }
+        });
     }
+
+
 
     // ─────────────────────────────────────────────────────────────
     //  HAND SCORING

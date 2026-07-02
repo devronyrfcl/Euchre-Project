@@ -21,7 +21,7 @@ public class MatchConfigBuilder : MonoBehaviour
         config.matchType    = "public";
         config.roomCode     = "";
         config.allowBots    = true;
-        config.botFillDelay = 5f;
+        config.botFillDelay = 20f;
 
         MatchConfigLoader.Save(config);
         LoadGameplayScene();
@@ -53,7 +53,7 @@ public class MatchConfigBuilder : MonoBehaviour
         config.matchType    = "solo";
         config.roomCode     = "";
         config.allowBots    = true;
-        config.botFillDelay = 0f;     // fill immediately
+        config.botFillDelay = 5f;     // fill immediately
 
         MatchConfigLoader.Save(config);
         LoadGameplayScene();
