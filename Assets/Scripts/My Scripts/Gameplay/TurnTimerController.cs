@@ -3,9 +3,10 @@ using TMPro;
 using UnityEngine;
 
 /// <summary>
-/// Counts down from 30 each turn.
-/// If timer hits 0 on local player's turn → auto plays a card.
-/// GameplayNetworkManager calls StartTimer() / StopTimer() each turn.
+/// Counts down from turnDuration each turn.
+/// Drives both the TMP_Text display and the
+/// GameplayPlayerData.UpdateTimerVisual() on the active player panel.
+/// On expiry during local turn → calls EuchreCardManager.AutoPlayFirstValidCard().
 /// </summary>
 public class TurnTimerController : MonoBehaviour
 {
@@ -17,13 +18,15 @@ public class TurnTimerController : MonoBehaviour
     [Header("=== SETTINGS ===")]
     [SerializeField] private int turnDuration = 30;
 
-    [Header("=== COLORS ===")]
+    [Header("=== TEXT COLORS ===")]
     [SerializeField] private Color normalColor  = Color.white;
-    [SerializeField] private Color warningColor = Color.yellow; // <= 10s
-    [SerializeField] private Color urgentColor  = Color.red;    // <= 5s
+    [SerializeField] private Color warningColor = Color.yellow;
+    [SerializeField] private Color urgentColor  = Color.red;
 
-    private Coroutine _timerRoutine;
-    private bool      _isLocalTurn = false;
+    private Coroutine          _timerRoutine;
+    private bool               _isLocalTurn      = false;
+    private int                _activePanelIndex = -1;
+    private GameplayPlayerData _activePanel      = null;
 
     private void Awake()
     {
@@ -37,21 +40,33 @@ public class TurnTimerController : MonoBehaviour
             timerText.gameObject.SetActive(false);
     }
 
-    // ─── Called by GameplayNetworkManager ────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    //  Public API
+    // ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Call at the start of every turn (including bots and opponents).
-    /// isLocalTurn: true only when it's the local human player's turn.
+    /// Start countdown for a new turn.
+    /// isLocalTurn: true = auto-play on expiry.
+    /// panelIndex: 0-3, used to find GameplayPlayerData for visual.
     /// </summary>
-    public void StartTimer(bool isLocalTurn)
+    public void StartTimer(bool isLocalTurn, int panelIndex)
     {
-        _isLocalTurn = isLocalTurn;
+        _isLocalTurn      = isLocalTurn;
+        _activePanelIndex = panelIndex;
+
+        // Get the panel's GameplayPlayerData
+        _activePanel = GameplayPlayFabManager.Instance != null
+            ? GameplayPlayFabManager.Instance.GetPlayerPanel(panelIndex)
+            : null;
+
+        // Reset all panels' visuals first
+        ResetAllPanelVisuals();
 
         if (_timerRoutine != null) StopCoroutine(_timerRoutine);
         _timerRoutine = StartCoroutine(TimerRoutine());
     }
 
-    /// <summary>Call when turn ends (card played, trump selected, etc.).</summary>
+    /// <summary>Stop and hide timer. Call when any action is taken.</summary>
     public void StopTimer()
     {
         if (_timerRoutine != null)
@@ -62,9 +77,16 @@ public class TurnTimerController : MonoBehaviour
 
         if (timerText != null)
             timerText.gameObject.SetActive(false);
+
+        // Reset active panel visual
+        _activePanel?.ResetTimerVisual();
+        _activePanel      = null;
+        _activePanelIndex = -1;
     }
 
-    // ─── Internal ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    //  Internal
+    // ─────────────────────────────────────────────────────────────
 
     private IEnumerator TimerRoutine()
     {
@@ -75,17 +97,23 @@ public class TurnTimerController : MonoBehaviour
 
         while (remaining > 0)
         {
-            UpdateTimerText(remaining);
+            UpdateTextDisplay(remaining);
+            _activePanel?.UpdateTimerVisual(remaining, turnDuration);
+
             yield return new WaitForSeconds(1f);
             remaining--;
         }
 
-        // Time is up
-        UpdateTimerText(0);
-        OnTimerExpired();
+        // Final tick at 0
+        UpdateTextDisplay(0);
+        _activePanel?.UpdateTimerVisual(0, turnDuration);
+
+        yield return new WaitForSeconds(0.2f);
+
+        OnExpired();
     }
 
-    private void UpdateTimerText(int seconds)
+    private void UpdateTextDisplay(int seconds)
     {
         if (timerText == null) return;
 
@@ -99,17 +127,27 @@ public class TurnTimerController : MonoBehaviour
             timerText.color = normalColor;
     }
 
-    private void OnTimerExpired()
+    private void ResetAllPanelVisuals()
+    {
+        if (GameplayPlayFabManager.Instance == null) return;
+
+        for (int i = 0; i < 4; i++)
+        {
+            GameplayPlayerData panel = GameplayPlayFabManager.Instance.GetPlayerPanel(i);
+            panel?.ResetTimerVisual();
+        }
+    }
+
+    private void OnExpired()
     {
         StopTimer();
 
         if (!_isLocalTurn) return;
 
-        // Auto play for local player
         EuchreCardManager cardManager = EuchreCardManager.Instance;
-        if (cardManager == null) return;
-
-        // Try to auto-select and play first valid card
-        cardManager.AutoPlayFirstValidCard();
+        if (cardManager != null)
+            cardManager.AutoPlayFirstValidCard();
+        else
+            Debug.LogWarning("[TurnTimer] EuchreCardManager.Instance is null on expiry.");
     }
 }

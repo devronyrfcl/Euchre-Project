@@ -39,6 +39,13 @@ public class GameplayPlayerData : MonoBehaviour
     [Header("=== GO ALONE BADGE ===")]
     [SerializeField] private GameObject goAloneBadge;        // shown when this player goes alone
 
+    [Header("=== TIMER VISUAL ===")]
+    [SerializeField] private Image timerVisualImage;
+
+    private static readonly Color TIMER_FULL    = Color.white;
+    private static readonly Color TIMER_WARNING = Color.yellow;
+    private static readonly Color TIMER_URGENT  = Color.red;
+
     // ─────────────────────────────────────────────────────────────
     //  Runtime Data
     // ─────────────────────────────────────────────────────────────
@@ -69,6 +76,7 @@ public class GameplayPlayerData : MonoBehaviour
         SetTrump(' ', false);
         SetTeamBadge(false, "");
         SetGoAlone(false);
+        ResetTimerVisual(); // ← ADD THIS
     }
 
     /// <summary>Load avatar from URL. Falls back to default if empty or failed.</summary>
@@ -217,5 +225,41 @@ public class GameplayPlayerData : MonoBehaviour
         {
             ApplyDefaultAvatar();
         }
+    }
+
+    /// <summary>
+    /// Called every second by TurnTimerController.
+    /// remaining: current seconds left (30 down to 0).
+    /// duration: total turn duration (30).
+    /// </summary>
+    public void UpdateTimerVisual(int remaining, int duration)
+    {
+        if (timerVisualImage == null) return;
+
+        timerVisualImage.gameObject.SetActive(true);
+
+        // Fill amount — 1 at full, 0 at zero
+        float fill = (float)remaining / duration;
+        timerVisualImage.fillAmount = fill;
+
+        // Color lerp: white → yellow → red
+        if (remaining <= 5)
+            timerVisualImage.color = TIMER_URGENT;
+        else if (remaining <= 10)
+            timerVisualImage.color = Color.Lerp(TIMER_URGENT, TIMER_WARNING,
+                (remaining - 5f) / 5f);
+        else
+            timerVisualImage.color = Color.Lerp(TIMER_WARNING, TIMER_FULL,
+                (remaining - 10f) / (duration - 10f));
+    }
+
+    /// <summary>Reset and hide timer visual.</summary>
+    public void ResetTimerVisual()
+    {
+        if (timerVisualImage == null) return;
+
+        timerVisualImage.fillAmount = 1f;
+        timerVisualImage.color      = TIMER_FULL;
+        timerVisualImage.gameObject.SetActive(false);
     }
 }

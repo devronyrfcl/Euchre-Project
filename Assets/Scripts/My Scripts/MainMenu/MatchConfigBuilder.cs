@@ -10,6 +10,8 @@ public class MatchConfigBuilder : MonoBehaviour
     [Header("=== REFERENCES ===")]
     [SerializeField] private PlayFabManager playFabManager;
 
+    [SerializeField] private float BotFillDelayForPublicMatch = 5f;
+
     // ─────────────────────────────────────────────────────────────
     //  PUBLIC ENTRY POINTS — hook these to your UI buttons
     // ─────────────────────────────────────────────────────────────
@@ -21,7 +23,7 @@ public class MatchConfigBuilder : MonoBehaviour
         config.matchType    = "public";
         config.roomCode     = "";
         config.allowBots    = true;
-        config.botFillDelay = 20f;
+        config.botFillDelay = BotFillDelayForPublicMatch;
 
         MatchConfigLoader.Save(config);
         LoadGameplayScene();

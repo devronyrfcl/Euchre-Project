@@ -39,6 +39,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private TrumpSelectionUI       trumpUI;
     [SerializeField] private TeamVoteUI             teamVoteUI;
     [SerializeField] private GameOverUI             gameOverUI;
+    [SerializeField] private NotificationManager      notificationManager;
 
     [Header("=== STATUS ===")]
     [SerializeField] private TMPro.TMP_Text statusText;
@@ -181,6 +182,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     public override void OnDisconnected(DisconnectCause cause)
     {
         Debug.LogWarning($"[Network] Disconnected: {cause}");
+
         SetStatus("Connection lost. Reconnecting...");
         StartCoroutine(ReconnectDelay());
     }
@@ -316,6 +318,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         Debug.LogWarning($"[Network] Player left: {otherPlayer.NickName}");
 
+        notificationManager.ShowWarningMessagePulse($"{otherPlayer.NickName} has left the game.");
+
         if (_state == GameState.MatchOver) return;
         if (!PhotonNetwork.IsMasterClient) return;
 
@@ -346,6 +350,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (seat == -1)
         {
             Debug.LogWarning("[Network] Room full — ignoring seat request.");
+            notificationManager.ShowWarningMessage("Room is full — unable to join.");
             return;
         }
 
@@ -513,6 +518,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
         Debug.Log($"[Network] Player entered: {newPlayer.NickName}");
+        notificationManager.ShowWarningMessagePulse($"{newPlayer.NickName} has joined the game.");
 
         // Read their properties — Photon may need a moment to sync them
         // so we wait one frame before reading
@@ -939,6 +945,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         bool isDealer = activeSeat == _dealerSeat;
         bool forced   = isDealer; // dealer MUST pick in phase 2
 
+        turnTimer?.StartTimer(isMyTurn, RemapSeatToPanel(activeSeat)); // ← add panel index
+
         SetStatus(isMyTurn
             ? "Choose trump suit"
             : $"{_seatToName.GetValueOrDefault(activeSeat, "Player")} is choosing...");
@@ -978,6 +986,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         SetState(GameState.Playing);
         SetStatus("Trump chosen — game begins!");
+
+        notificationManager.ShowWarningMessagePulse($"Trump is {_trump}!");
 
         if (PhotonNetwork.IsMasterClient)
             StartCoroutine(DelayThen(() =>
@@ -1029,10 +1039,13 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         // ADD THIS
         bool isLocalTurn = activeSeat == _localSeat;
-        turnTimer?.StartTimer(isLocalTurn);
+        
+        //turnTimer?.StartTimer(isLocalTurn);
 
 
         bool isMyTurn = activeSeat == _localSeat;
+
+        turnTimer?.StartTimer(isMyTurn, RemapSeatToPanel(activeSeat)); // ← add panel index
 
         SetStatus(isMyTurn
             ? "Your turn — select a card"
@@ -1195,6 +1208,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
             SetStatus($"{SeatName(winnerSeat)} wins the trick!");
 
+            notificationManager.ShowWarningMessagePulse($"{SeatName(winnerSeat)} wins the trick!");
+
             int totalTricks = _team1Tricks + _team2Tricks;
 
             if (totalTricks >= 5)
@@ -1219,7 +1234,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     //  HAND SCORING
     // ─────────────────────────────────────────────────────────────
 
-    [PunRPC]
+    /*[PunRPC]
     private void RPC_ScoreHand(int t1Tricks, int t2Tricks)
     {
         _team1Tricks = t1Tricks;
@@ -1262,13 +1277,120 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             StartCoroutine(DelayThen(() =>
                 photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, nextDealer), 2f));
         }
+    }*/
+
+    [PunRPC]
+    private void RPC_ScoreHand(int t1Tricks, int t2Tricks)
+    {
+        _team1Tricks = t1Tricks;
+        _team2Tricks = t2Tricks;
+
+        int pts1 = 0, pts2 = 0;
+        bool wentAlone  = _skipSeat != -1;
+        bool team1Called = _trumpPickerSeat % 2 == 0;
+
+        if (team1Called)
+        {
+            if (wentAlone)
+            {
+                // Solo player is on team 1
+                if (_team1Tricks == 5)      pts1 = 4; // all 5 alone = 4 pts
+                else if (_team1Tricks >= 3) pts1 = 1; // 3 or 4 tricks = 1 pt
+                else                        pts2 = 2; // euchred = 2 pts to opponents
+            }
+            else
+            {
+                if (_team1Tricks == 5)      pts1 = 2; // march = 2 pts
+                else if (_team1Tricks >= 3) pts1 = 1; // 3 or 4 tricks = 1 pt
+                else                        pts2 = 2; // euchred = 2 pts to opponents
+            }
+        }
+        else
+        {
+            if (wentAlone)
+            {
+                if (_team2Tricks == 5)      pts2 = 4;
+                else if (_team2Tricks >= 3) pts2 = 1;
+                else                        pts1 = 2;
+            }
+            else
+            {
+                if (_team2Tricks == 5)      pts2 = 2;
+                else if (_team2Tricks >= 3) pts2 = 1;
+                else                        pts1 = 2;
+            }
+        }
+
+        _team1Score += pts1;
+        _team2Score += pts2;
+
+        // Build hand result summary for game over panel
+        string handSummary = BuildHandSummary(pts1, pts2, wentAlone, team1Called);
+
+        trickDisplay?.UpdateTrickScore(
+            _team1Tricks, _team2Tricks,
+            _team1Score,  _team2Score,
+            _isTeamMode);
+
+        SetState(GameState.HandOver);
+        SetStatus($"Hand over! T1:{_team1Score} — T2:{_team2Score}");
+
+        Debug.Log($"[Network] Hand scored → T1:{_team1Score} pts2:{_team2Score} " +
+                $"| tricks T1:{_team1Tricks} T2:{_team2Tricks}");
+
+        if (_team1Score >= WIN_SCORE || _team2Score >= WIN_SCORE)
+        {
+            EndMatch(handSummary);
+            return;
+        }
+
+        if (PhotonNetwork.IsMasterClient)
+        {
+            int nextDealer = (_dealerSeat + 1) % 4;
+            StartCoroutine(DelayThen(() =>
+                photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, nextDealer), 2f));
+        }
+    }
+
+    private string BuildHandSummary(int pts1, int pts2, bool wentAlone, bool team1Called)
+    {
+        string caller   = team1Called ? "Team 1" : "Team 2";
+        string playMode = wentAlone   ? "Going Alone" : "Team Play";
+        string result   = "";
+
+        if (team1Called)
+        {
+            if (pts1 > 0)
+            {
+                if (_team1Tricks == 5 && wentAlone) result = "March Alone! +4 pts";
+                else if (_team1Tricks == 5)         result = "March! +2 pts";
+                else                                result = "Made it! +1 pt";
+            }
+            else
+                result = "Euchred! Opponents +2 pts";
+        }
+        else
+        {
+            if (pts2 > 0)
+            {
+                if (_team2Tricks == 5 && wentAlone) result = "March Alone! +4 pts";
+                else if (_team2Tricks == 5)         result = "March! +2 pts";
+                else                                result = "Made it! +1 pt";
+            }
+            else
+                result = "Euchred! Opponents +2 pts";
+        }
+
+        return $"Trump caller: {caller} | Mode: {playMode}\n" +
+            $"Tricks — T1: {_team1Tricks} | T2: {_team2Tricks}\n" +
+            $"Result: {result}";
     }
 
     // ─────────────────────────────────────────────────────────────
     //  MATCH END
     // ─────────────────────────────────────────────────────────────
 
-    private void EndMatch()
+    /*private void EndMatch()
     {
         SetState(GameState.MatchOver);
 
@@ -1295,13 +1417,69 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             localPlayerWon: localWon,
             pot:            pot,
             betAmount:      betAmount);
+    }*/
+
+    private void EndMatch(string lastHandSummary = "")
+    {
+        SetState(GameState.MatchOver);
+        turnTimer?.StopTimer();
+        turnIndicator?.SetActiveTurn(-1);
+
+        bool localWon = (_localSeat % 2 == 0 && _team1Score >= WIN_SCORE)
+                    || (_localSeat % 2 == 1 && _team2Score >= WIN_SCORE);
+
+        int winnerTeam   = _team1Score >= WIN_SCORE ? 1 : 2;
+        int pot          = _config?.totalPot  ?? 400;
+        int betAmount    = _config?.betAmount ?? 100;
+
+        // ── Trophy calculation ─────────────────────────────────────
+        int trophyChange = localWon ? 30 : -15;
+
+        Debug.Log($"[Network] Match over — Local player {(localWon ? "WON" : "LOST")}");
+        Debug.Log($"[Network] Final Score — Team 1: {_team1Score} | Team 2: {_team2Score}");
+        Debug.Log($"[Network] Trophy change: {(trophyChange > 0 ? "+" : "")}{trophyChange}");
+
+        // ── Economy ────────────────────────────────────────────────
+        if (localWon)
+            playFabManager?.DistributeWinnings();
+
+        int localTricks = _localSeat % 2 == 0 ? _team1Tricks : _team2Tricks;
+        playFabManager?.SaveMatchStats(localWon, localTricks, 5);
+
+        // ── Build full match stats for game over panel ─────────────
+        MatchEndData endData = new MatchEndData
+        {
+            localWon        = localWon,
+            winnerTeam      = winnerTeam,
+            team1Score      = _team1Score,
+            team2Score      = _team2Score,
+            team1Tricks     = _team1Tricks,
+            team2Tricks     = _team2Tricks,
+            pot             = pot,
+            betAmount       = betAmount,
+            trophyChange    = trophyChange,
+            lastHandSummary = lastHandSummary,
+            isTeamMode      = _isTeamMode,
+            localTeam       = _localSeat % 2 == 0 ? 1 : 2
+        };
+
+        
+        /*gameOverUI?.Show(
+            endData:      endData,
+            onRematch:    OnRematch,
+            onMainMenu:   OnMainMenu);
+        */
+
+        gameOverUI?.Show(endData, OnRematch, OnMainMenu);
+
+        
     }
 
     private void OnRematch()
     {
-        playFabManager.DeductBetOnMatchStart();
-        if (PhotonNetwork.IsMasterClient)
-            StartNewMatch();
+        trickDisplay?.ResetDisplay();
+        playFabManager?.DeductBetOnMatchStart();
+        if (PhotonNetwork.IsMasterClient) StartNewMatch();
     }
 
     private void OnMainMenu()

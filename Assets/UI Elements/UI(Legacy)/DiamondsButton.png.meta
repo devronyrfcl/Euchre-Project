@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 45a22b923a9ee493fb2b16f2f6a6fcf5
+guid: 8906b7ba818d447d18d31be3091c5adf
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 8270828777698756652
-    second: Group 289823_0
+      213: -4069943014196145091
+    second: Group 289825_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -122,11 +122,24 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Group 289823_0
+      name: Group 289825_0
       rect:
         serializedVersion: 2
         x: 0
@@ -141,8 +154,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: c2800dcd3f2e7c270800000000000000
-      internalID: 8270828777698756652
+      spriteID: d3491ce5468a487c0800000000000000
+      internalID: -4069943014196145091
       vertices: []
       indices: 
       edges: []
@@ -161,7 +174,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Group 289823_0: 8270828777698756652
+      Group 289825_0: -4069943014196145091
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

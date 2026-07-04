@@ -42,8 +42,7 @@ public class EuchreCardManager : MonoBehaviour
     [SerializeField] private GameObject playCardButton; // assign in Inspector
 
     [Header("=== Error Panel ===")]
-    [SerializeField] private TMP_Text errorText; // assign in Inspector
-    [SerializeField] private LeanWindow errorPanel; // assign in Inspector
+    [SerializeField] private NotificationManager notificationManager;
 
     [Header("=== PLAYER PANEL POSITIONS ===")]
     [Tooltip("Assign the RectTransform of each player panel root. " +
@@ -428,11 +427,8 @@ public class EuchreCardManager : MonoBehaviour
         if (!_selectionEnabled)
         {
             Debug.LogWarning("[CardManager] Selection not enabled — not your turn yet.");
-
-            // Optional: show message to player
-            errorText.text = "It's not your turn yet!";
-            if (errorPanel != null)
-                errorPanel.TurnOn();
+            notificationManager.ShowWarningMessage("It's not your turn yet!");
+            
             return;
         }
 
@@ -449,20 +445,16 @@ public class EuchreCardManager : MonoBehaviour
         if (selected == null)
         {
             Debug.LogWarning("[CardManager] No card selected.");
-            // Optional: show message to player
-            errorText.text = "Please select a card to play.";
-            if (errorPanel != null)
-                errorPanel.TurnOn();
+            notificationManager.ShowWarningMessage("Please select a card to play.");
+           
             return;
         }
 
         if (!IsValidPlay(selected.CardType))
         {
             Debug.LogWarning("[CardManager] Invalid play — must follow suit.");
-            // Optional: show message to player
-            errorText.text = "Invalid play! You must follow suit.";
-            if (errorPanel != null)
-                errorPanel.TurnOn();
+            notificationManager.ShowWarningMessage("Invalid play! You must follow suit.");
+            
             return;
         }
 
