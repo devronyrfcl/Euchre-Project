@@ -111,6 +111,20 @@ public class PlayFabManager : MonoBehaviour
     [SerializeField] private GameObject myLeaderboardCardPrefab;
     [SerializeField] private GameObject otherLeaderboardCardPrefab;
 
+    [Header("=== INVITE SYSTEM ===")]
+    [SerializeField] private GameObject      inviteCardPrefab;
+    [SerializeField] private RectTransform   invitePanelContent;
+    [SerializeField] private GettingInvitePanel gettingInvitePanel;
+    [SerializeField] private MatchConfigBuilder matchConfigBuilder;
+
+    // Invite poll settings
+    private const float INVITE_POLL_INTERVAL = 5f;
+    private Coroutine   _invitePollRoutine;
+
+    // Current invite room data
+    private const string INVITE_GAME_NAME  = "Euchre";
+    private const string INVITE_GAME_LEVEL = "1";
+
     public string CachedPlayFabId    => _playFabId;
     public string CachedDisplayName  => _cachedDisplayName;
     public string CachedAvatarUrl    => _cachedAvatarUrl;
@@ -427,6 +441,9 @@ public class PlayFabManager : MonoBehaviour
 
         // Chain: profile → stats → currencies
         FetchProfileAndStats();
+
+        // ADD THIS
+        StartInvitePolling();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -1813,6 +1830,274 @@ public class PlayFabManager : MonoBehaviour
                                error.GenerateErrorReport());
                 ShowError("Failed to retrieve player profile. Please try again.");
             });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  INVITE PANEL — load friends as invite cards
+    // ─────────────────────────────────────────────────────────────
+
+    public void LoadPlayerListOfInvite()
+    {
+        // Clear existing cards
+        foreach (Transform child in invitePanelContent)
+            Destroy(child.gameObject);
+
+        invitePanelContent.sizeDelta = new Vector2(
+            invitePanelContent.sizeDelta.x, 0f);
+
+        PlayFabClientAPI.GetFriendsList(
+            new PlayFab.ClientModels.GetFriendsListRequest(),
+            result =>
+            {
+                foreach (var friend in result.Friends)
+                {
+                    string friendId   = friend.FriendPlayFabId;
+                    string friendName = friend.TitleDisplayName
+                                ?? friend.FriendPlayFabId;
+
+                    // Fetch avatar then spawn card
+                    FetchFriendAvatarForInvite(friendId, friendName);
+                }
+
+                if (result.Friends.Count == 0)
+                    Debug.Log("[InviteSystem] No friends to invite.");
+            },
+            error =>
+            {
+                Debug.LogError("[InviteSystem] GetFriendsList: "
+                            + error.GenerateErrorReport());
+            });
+    }
+
+    private void FetchFriendAvatarForInvite(string playFabId, string displayName)
+    {
+        PlayFabClientAPI.GetPlayerProfile(
+            new PlayFab.ClientModels.GetPlayerProfileRequest
+            {
+                PlayFabId          = playFabId,
+                ProfileConstraints = new PlayFab.ClientModels.PlayerProfileViewConstraints
+                {
+                    ShowAvatarUrl   = true,
+                    ShowDisplayName = true
+                }
+            },
+            result =>
+            {
+                string avatarUrl = result.PlayerProfile?.AvatarUrl ?? "";
+                string name      = result.PlayerProfile?.DisplayName ?? displayName;
+
+                if (!string.IsNullOrEmpty(avatarUrl))
+                    StartCoroutine(LoadAvatarThenSpawnInviteCard(
+                        playFabId, name, avatarUrl));
+                else
+                    SpawnInviteCard(playFabId, name, null);
+            },
+            error =>
+            {
+                SpawnInviteCard(playFabId, displayName, null);
+            });
+    }
+
+    private IEnumerator LoadAvatarThenSpawnInviteCard(string playFabId,
+                                                    string displayName,
+                                                    string avatarUrl)
+    {
+        UnityEngine.Networking.UnityWebRequest www =
+            UnityEngine.Networking.UnityWebRequestTexture.GetTexture(avatarUrl);
+        yield return www.SendWebRequest();
+
+        Texture2D tex = www.result ==
+            UnityEngine.Networking.UnityWebRequest.Result.Success
+            ? UnityEngine.Networking.DownloadHandlerTexture.GetContent(www)
+            : null;
+
+        SpawnInviteCard(playFabId, displayName, tex);
+    }
+
+    private void SpawnInviteCard(string playFabId, string displayName, Texture2D avatar)
+    {
+        if (inviteCardPrefab == null || invitePanelContent == null) return;
+
+        GameObject obj  = Instantiate(inviteCardPrefab, invitePanelContent);
+        InviteCard card = obj.GetComponent<InviteCard>();
+
+        card?.Setup(playFabId, displayName,
+            INVITE_GAME_NAME, INVITE_GAME_LEVEL,
+            avatar, this);
+
+        // Expand content height per card
+        invitePanelContent.sizeDelta = new Vector2(
+            invitePanelContent.sizeDelta.x,
+            invitePanelContent.sizeDelta.y + 110f);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  SEND INVITE — called by InviteCard button
+    // ─────────────────────────────────────────────────────────────
+
+    public void SendMatchInviteTo(string toPlayFabId, string toName)
+    {
+        // Generate a unique private room code for this invite
+        string roomCode = GenerateInviteRoomCode();
+
+        PlayFabClientAPI.ExecuteCloudScript(
+            new PlayFab.ClientModels.ExecuteCloudScriptRequest
+            {
+                FunctionName = "SendMatchInvite",
+                FunctionParameter = new
+                {
+                    toPlayFabId   = toPlayFabId,
+                    fromPlayFabId = _playFabId,
+                    fromName      = _cachedDisplayName,
+                    roomCode      = roomCode,
+                    gameName      = INVITE_GAME_NAME,
+                    gameLevel     = INVITE_GAME_LEVEL
+                },
+                GeneratePlayStreamEvent = false
+            },
+            result =>
+            {
+                Debug.Log($"[InviteSystem] Invite sent to {toName}");
+                ShowInlineError($"Invite sent to {toName}!");
+
+                // Host starts loading the private room immediately
+                matchConfigBuilder?.BuildPrivateMatch(roomCode);
+            },
+            error =>
+            {
+                Debug.LogError("[InviteSystem] SendMatchInvite: "
+                            + error.GenerateErrorReport());
+                ShowInlineError("Failed to send invite. Try again.");
+            });
+    }
+
+    private string GenerateInviteRoomCode()
+    {
+        // 6-char alphanumeric room code
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        System.Random rng = new System.Random();
+        for (int i = 0; i < 6; i++)
+            sb.Append(chars[rng.Next(chars.Length)]);
+        return sb.ToString();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  POLL FOR INCOMING INVITES
+    // ─────────────────────────────────────────────────────────────
+
+    public void StartInvitePolling()
+    {
+        StopInvitePolling();
+        _invitePollRoutine = StartCoroutine(InvitePollRoutine());
+    }
+
+    public void StopInvitePolling()
+    {
+        if (_invitePollRoutine != null)
+        {
+            StopCoroutine(_invitePollRoutine);
+            _invitePollRoutine = null;
+        }
+    }
+
+    private IEnumerator InvitePollRoutine()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(INVITE_POLL_INTERVAL);
+            CheckForPendingInvite();
+        }
+    }
+
+    private void CheckForPendingInvite()
+    {
+        PlayFabClientAPI.ExecuteCloudScript(
+            new PlayFab.ClientModels.ExecuteCloudScriptRequest
+            {
+                FunctionName            = "CheckMatchInvite",
+                FunctionParameter       = new { },
+                GeneratePlayStreamEvent = false
+            },
+            result =>
+            {
+                if (result.FunctionResult == null) return;
+
+                string json = Newtonsoft.Json.JsonConvert
+                    .SerializeObject(result.FunctionResult);
+
+                InviteCheckResult data = Newtonsoft.Json.JsonConvert
+                    .DeserializeObject<InviteCheckResult>(json);
+
+                if (data == null || !data.hasInvite || data.invite == null) return;
+
+                // Only show if panel not already visible
+                if (gettingInvitePanel != null)
+                    gettingInvitePanel.Show(
+                        data.invite.fromName,
+                        data.invite.gameName,
+                        data.invite.gameLevel,
+                        data.invite.roomCode,
+                        this);
+            },
+            error =>
+            {
+                Debug.LogWarning("[InviteSystem] CheckMatchInvite poll failed: "
+                            + error.GenerateErrorReport());
+            });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  ACCEPT / REJECT — called by GettingInvitePanel
+    // ─────────────────────────────────────────────────────────────
+
+    public void AcceptInvite(string roomCode)
+    {
+        ClearInviteOnServer();
+        StopInvitePolling();
+
+        // Join the private room using same room code as inviter
+        matchConfigBuilder?.BuildPrivateMatch(roomCode);
+    }
+
+    public void RejectInvite()
+    {
+        ClearInviteOnServer();
+    }
+
+    private void ClearInviteOnServer()
+    {
+        PlayFabClientAPI.ExecuteCloudScript(
+            new PlayFab.ClientModels.ExecuteCloudScriptRequest
+            {
+                FunctionName            = "ClearMatchInvite",
+                FunctionParameter       = new { },
+                GeneratePlayStreamEvent = false
+            },
+            result => Debug.Log("[InviteSystem] Invite cleared."),
+            error  => Debug.LogWarning("[InviteSystem] ClearMatchInvite failed: "
+                                    + error.GenerateErrorReport()));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  INTERNAL DATA CLASSES
+    // ─────────────────────────────────────────────────────────────
+
+    [System.Serializable]
+    private class InviteCheckResult
+    {
+        public bool        hasInvite;
+        public InviteData  invite;
+    }
+
+    [System.Serializable]
+    private class InviteData
+    {
+        public string fromPlayFabId;
+        public string fromName;
+        public string roomCode;
+        public string gameName;
+        public string gameLevel;
     }
 
 }

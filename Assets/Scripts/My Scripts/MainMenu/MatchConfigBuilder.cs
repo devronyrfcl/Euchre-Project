@@ -104,6 +104,9 @@ public class MatchConfigBuilder : MonoBehaviour
 
     private void LoadGameplayScene()
     {
+        
+        playFabManager.StopInvitePolling();
         UnityEngine.SceneManagement.SceneManager.LoadScene("EuchreGame");
+
     }
 }
