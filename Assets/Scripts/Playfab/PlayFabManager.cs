@@ -2080,6 +2080,115 @@ public class PlayFabManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  SCENE TRANSITION LOADING
+    // ─────────────────────────────────────────────────────────────
+
+    public void ShowLoadingThenLoadScene(string sceneName)
+    {
+        StartCoroutine(LoadingTransitionCoroutine(sceneName));
+    }
+
+    private IEnumerator LoadingTransitionCoroutine(string sceneName)
+    {
+        // Step 1 — hide main menu
+        if (mainMenuPanel != null)
+            mainMenuPanel.SetActive(false);
+
+        // Step 2 — show splash and loading panels
+        if (splashAndLoading != null)
+            splashAndLoading.SetActive(true);
+
+        if (mainSplashPanel != null)
+            mainSplashPanel.SetActive(true);
+
+        // Step 3 — reset fill and logo
+        if (firstLoadingFill != null)
+            firstLoadingFill.fillAmount = 0f;
+
+        if (splashScreenLogo != null)
+        {
+            splashScreenLogo.localScale = Vector3.zero;
+            splashScreenLogo
+                .DOScale(new Vector3(2.4f, 2f, 2f), 0.8f)
+                .SetEase(Ease.OutBack);
+        }
+
+        if (firstLoadingParent != null)
+        {
+            firstLoadingParent.anchoredPosition =
+                new Vector2(firstLoadingParent.anchoredPosition.x, -250f);
+            firstLoadingParent
+                .DOAnchorPosY(-126.2f, 0.6f)
+                .SetEase(Ease.OutCubic);
+        }
+
+        yield return new WaitForSeconds(0.65f);
+
+        // Step 4 — animate fill bar
+        // Phase A: fill to 60% naturally over 1.5 seconds
+        float elapsed = 0f;
+        float fillDuration = 1.5f;
+
+        if (loadingText != null) loadingText.text = "Loading.";
+
+        float loadingTextTimer = 0f;
+        int   loadingDotState  = 0;
+
+        while (elapsed < fillDuration)
+        {
+            elapsed += Time.deltaTime;
+
+            // Animate loading dots
+            loadingTextTimer += Time.deltaTime;
+            if (loadingTextTimer >= 0.3f)
+            {
+                loadingTextTimer = 0f;
+                loadingDotState++;
+                if (loadingDotState > 4) loadingDotState = 1;
+                if (loadingText != null)
+                    loadingText.text = "Loading" + new string('.', loadingDotState);
+            }
+
+            float target = Mathf.Clamp01(elapsed / fillDuration) * 0.75f;
+            if (firstLoadingFill != null)
+                firstLoadingFill.fillAmount = Mathf.Lerp(
+                    firstLoadingFill.fillAmount, target, Time.deltaTime * 4f);
+
+            yield return null;
+        }
+
+        // Phase B: start async scene load while filling remaining 25%
+        AsyncOperation asyncLoad =
+            UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(sceneName);
+
+        asyncLoad.allowSceneActivation = false;
+
+        while (asyncLoad.progress < 0.9f)
+        {
+            // Map 0→0.9 progress to 0.75→0.95 fill
+            float fill = 0.75f + (asyncLoad.progress / 0.9f) * 0.2f;
+            if (firstLoadingFill != null)
+                firstLoadingFill.fillAmount = fill;
+
+            yield return null;
+        }
+
+        // Phase C: fill to 100% then activate scene
+        if (firstLoadingFill != null)
+        {
+            yield return firstLoadingFill
+                .DOFillAmount(1f, 0.35f)
+                .SetEase(Ease.OutQuad)
+                .WaitForCompletion();
+        }
+
+        yield return new WaitForSeconds(0.2f);
+
+        // Step 5 — activate scene
+        asyncLoad.allowSceneActivation = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     //  INTERNAL DATA CLASSES
     // ─────────────────────────────────────────────────────────────
 

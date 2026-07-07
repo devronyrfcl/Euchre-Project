@@ -117,6 +117,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     // Cards
     private Dictionary<int, List<string>> _hands   = new Dictionary<int, List<string>>();
+    // Prevents multiple bot coroutines running simultaneously
+    private readonly HashSet<int> _botBusySeats = new HashSet<int>();
     private List<string>                  _played  = new List<string>();
     private List<string>                  _deck    = new List<string>();
 
@@ -730,6 +732,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_StartHand(int dealerSeat)
     {
+        
+        // ADD THIS at the top
+        _botBusySeats.Clear();
         _dealerSeat      = dealerSeat;
         _team1Tricks     = 0;
         _team2Tricks     = 0;
@@ -1185,6 +1190,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_TrickWon(int winnerSeat)
     {
+        _botBusySeats.Clear();
+        
         turnTimer?.StopTimer();
         turnIndicator?.SetActiveTurn(-1);
 
@@ -1492,9 +1499,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     //  BOT AI
     // ─────────────────────────────────────────────────────────────
 
-    private IEnumerator BotTrumpPhase1(int seat, string upcard, bool forced)
+    /*private IEnumerator BotTrumpPhase1(int seat, string upcard, bool forced)
     {
-        yield return new WaitForSeconds(UnityEngine.Random.Range(0.7f, 1.4f));
+        yield return new WaitForSeconds(UnityEngine.Random.Range(2f, 8f));
 
         char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
 
@@ -1507,10 +1514,10 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         else
             AdvanceTrumpPhase1(upcard);
     }
-
+    
     private IEnumerator BotTrumpPhase2(int seat, string excludedSuit, bool forced)
     {
-        yield return new WaitForSeconds(UnityEngine.Random.Range(0.7f, 1.4f));
+        yield return new WaitForSeconds(UnityEngine.Random.Range(2f, 8f));
 
         bool pick = forced || UnityEngine.Random.value > 0.4f;
 
@@ -1530,10 +1537,70 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             photonView.RPC(nameof(RPC_TrumpPhase2Turn), RpcTarget.All, next, excludedSuit);
         }
     }
+    */
 
-    private IEnumerator BotPlayCard(int seat)
+    private IEnumerator BotTrumpPhase1(int seat, string upcard, bool forced)
     {
-        yield return new WaitForSeconds(UnityEngine.Random.Range(0.7f, 1.4f));
+        if (_botBusySeats.Contains(seat)) yield break;
+        _botBusySeats.Add(seat);
+
+        yield return new WaitForSeconds(UnityEngine.Random.Range(2f, 8f));
+
+        // Validate still this bot's trump turn
+        if (_turnSeat != seat)
+        {
+            _botBusySeats.Remove(seat);
+            yield break;
+        }
+
+        _botBusySeats.Remove(seat);
+
+        char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
+        bool orderUp    = forced || UnityEngine.Random.value > 0.4f;
+
+        if (orderUp)
+            photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All,
+                seat, (int)upcardSuit);
+        else
+            AdvanceTrumpPhase1(upcard);
+    }
+
+    private IEnumerator BotTrumpPhase2(int seat, string excludedSuit, bool forced)
+    {
+        if (_botBusySeats.Contains(seat)) yield break;
+        _botBusySeats.Add(seat);
+
+        yield return new WaitForSeconds(UnityEngine.Random.Range(2f, 8f));
+
+        if (_turnSeat != seat)
+        {
+            _botBusySeats.Remove(seat);
+            yield break;
+        }
+
+        _botBusySeats.Remove(seat);
+
+        bool pick = forced || UnityEngine.Random.value > 0.4f;
+
+        if (pick)
+        {
+            string chosen = "C";
+            foreach (string s in new[] { "C","D","H","S" })
+            { if (s != excludedSuit) { chosen = s; break; } }
+            photonView.RPC(nameof(RPC_TrumpSuitChosen), RpcTarget.All, seat, chosen);
+        }
+        else
+        {
+            int next = (seat + 1) % 4;
+            photonView.RPC(nameof(RPC_TrumpPhase2Turn), RpcTarget.All, next, excludedSuit);
+        }
+    }
+
+    
+
+    /*private IEnumerator BotPlayCard(int seat)
+    {
+        yield return new WaitForSeconds(UnityEngine.Random.Range(3f, 10f));
 
         if (!_hands.ContainsKey(seat) || _hands[seat].Count == 0) yield break;
 
@@ -1541,6 +1608,50 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (string.IsNullOrEmpty(card)) yield break;
 
         _hands[seat].Remove(card);
+        photonView.RPC(nameof(RPC_CardPlayed), RpcTarget.All, seat, card);
+    }*/
+
+    private IEnumerator BotPlayCard(int seat)
+    {
+        // Guard — if this bot seat is already processing, skip
+        if (_botBusySeats.Contains(seat))
+        {
+            Debug.LogWarning($"[Network] Bot seat {seat} already busy — skipping duplicate call.");
+            yield break;
+        }
+
+        _botBusySeats.Add(seat);
+
+        float delay = UnityEngine.Random.Range(2f, 8f);
+        Debug.Log($"[Network] Bot seat {seat} thinking for {delay:F1}s...");
+        yield return new WaitForSeconds(delay);
+
+        // Validate it is still this bot's turn after the delay
+        if (_turnSeat != seat)
+        {
+            Debug.LogWarning($"[Network] Bot seat {seat} — turn changed during delay. Aborting.");
+            _botBusySeats.Remove(seat);
+            yield break;
+        }
+
+        // Validate bot still has cards
+        if (!_hands.ContainsKey(seat) || _hands[seat].Count == 0)
+        {
+            Debug.LogWarning($"[Network] Bot seat {seat} has no cards.");
+            _botBusySeats.Remove(seat);
+            yield break;
+        }
+
+        string card = ChooseBotCard(seat);
+        if (string.IsNullOrEmpty(card))
+        {
+            _botBusySeats.Remove(seat);
+            yield break;
+        }
+
+        _hands[seat].Remove(card);
+        _botBusySeats.Remove(seat);
+
         photonView.RPC(nameof(RPC_CardPlayed), RpcTarget.All, seat, card);
     }
 

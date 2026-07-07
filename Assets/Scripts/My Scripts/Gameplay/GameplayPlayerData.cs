@@ -137,10 +137,10 @@ public class GameplayPlayerData : MonoBehaviour
             trumpFrame.SetActive(isThisPlayerPicker);
 
         // Reset all suit icons to dim
-        SetSuitIconAlpha(trumpClubsIcon,    0.25f);
-        SetSuitIconAlpha(trumpDiamondsIcon, 0.25f);
-        SetSuitIconAlpha(trumpHeartsIcon,   0.25f);
-        SetSuitIconAlpha(trumpSpadesIcon,   0.25f);
+        SetSuitIconAlpha(trumpClubsIcon,    0.05f);
+        SetSuitIconAlpha(trumpDiamondsIcon, 0.05f);
+        SetSuitIconAlpha(trumpHeartsIcon,   0.05f);
+        SetSuitIconAlpha(trumpSpadesIcon,   0.05f);
 
         if (!isThisPlayerPicker || suit == ' ' || suit == 'N') return;
 

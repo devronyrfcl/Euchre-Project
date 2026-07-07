@@ -104,9 +104,15 @@ public class MatchConfigBuilder : MonoBehaviour
 
     private void LoadGameplayScene()
     {
-        
-        playFabManager.StopInvitePolling();
-        UnityEngine.SceneManagement.SceneManager.LoadScene("EuchreGame");
+        // Stop invite polling before leaving
+        if (playFabManager != null)
+            playFabManager.StopInvitePolling();
 
+        // Use PlayFabManager's loading transition instead of direct scene load
+        if (playFabManager != null)
+            playFabManager.ShowLoadingThenLoadScene("EuchreGame");
+        else
+            // Fallback if reference missing
+            UnityEngine.SceneManagement.SceneManager.LoadScene("EuchreGame");
     }
 }
