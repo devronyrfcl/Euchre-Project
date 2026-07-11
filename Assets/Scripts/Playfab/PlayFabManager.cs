@@ -433,7 +433,7 @@ public class PlayFabManager : MonoBehaviour
     //  FLOW 3 — Go To Main Menu
     // ─────────────────────────────────────────────────────────────
 
-    private void GoToMainMenu()
+    /*private void GoToMainMenu()
     {
         splashAndLoading.SetActive(false);
         mainSplashPanel.SetActive(false);
@@ -444,6 +444,21 @@ public class PlayFabManager : MonoBehaviour
 
         // ADD THIS
         StartInvitePolling();
+    }*/
+
+    private void GoToMainMenu()
+    {
+        splashAndLoading.SetActive(false);
+        mainSplashPanel.SetActive(false);
+        mainMenuPanel.SetActive(true);
+
+        FetchProfileAndStats();
+        StartInvitePolling();
+
+        // ADD THIS
+        NotificationManager.Instance?.AddNotification(
+            "Welcome Back",
+            $"Good to see you again, {_cachedDisplayName}! Ready to play?");
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -649,6 +664,11 @@ public class PlayFabManager : MonoBehaviour
         
                 SetTextArray(gpTexts, gp.ToString());
                 SetTextArray(pcTexts, pc.ToString());
+
+                // ADD THIS
+                NotificationManager.Instance?.AddNotification(
+                    "Balance Loaded",
+                    $"Your current Poker Chips balance is {pc:N0} PC.");
             },
             error =>
             {
@@ -869,6 +889,10 @@ public class PlayFabManager : MonoBehaviour
             result =>
             {
                 Debug.Log("[PlayFabManager] Stats saved successfully.");
+                // ADD THIS
+                NotificationManager.Instance?.AddNotification(
+                    "Stats Saved",
+                    "Your match stats have been saved to the server.");
             },
             error =>
             {
@@ -1962,6 +1986,10 @@ public class PlayFabManager : MonoBehaviour
 
                 // Host starts loading the private room immediately
                 matchConfigBuilder?.BuildPrivateMatch(roomCode);
+
+                NotificationManager.Instance?.AddNotification(
+                    "Invite Sent",
+                    $"Match invite sent to {toName}. Waiting for them to join...");
             },
             error =>
             {
@@ -2055,6 +2083,11 @@ public class PlayFabManager : MonoBehaviour
     {
         ClearInviteOnServer();
         StopInvitePolling();
+
+        // ADD THIS
+        NotificationManager.Instance?.AddNotification(
+            "Invite Accepted",
+            $"You accepted the match invite. Joining room {roomCode}...");
 
         // Join the private room using same room code as inviter
         matchConfigBuilder?.BuildPrivateMatch(roomCode);
@@ -2186,6 +2219,12 @@ public class PlayFabManager : MonoBehaviour
 
         // Step 5 — activate scene
         asyncLoad.allowSceneActivation = true;
+    }
+
+    /// <summary>Public wrapper for ShowError — used by NotificationCard.</summary>
+    public void ShowErrorPublic(string message)
+    {
+        ShowError(message);
     }
 
     // ─────────────────────────────────────────────────────────────

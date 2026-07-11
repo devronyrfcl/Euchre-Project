@@ -39,7 +39,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private TrumpSelectionUI       trumpUI;
     [SerializeField] private TeamVoteUI             teamVoteUI;
     [SerializeField] private GameOverUI             gameOverUI;
-    [SerializeField] private NotificationManager      notificationManager;
+    [SerializeField] private NotificationManagerInGame notificationManager;
 
     [Header("=== STATUS ===")]
     [SerializeField] private TMPro.TMP_Text statusText;

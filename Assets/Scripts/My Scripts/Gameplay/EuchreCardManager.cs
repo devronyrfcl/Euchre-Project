@@ -42,7 +42,7 @@ public class EuchreCardManager : MonoBehaviour
     [SerializeField] private GameObject playCardButton; // assign in Inspector
 
     [Header("=== Error Panel ===")]
-    [SerializeField] private NotificationManager notificationManager;
+    [SerializeField] private NotificationManagerInGame notificationManager;
 
     [Header("=== PLAYER PANEL POSITIONS ===")]
     [Tooltip("Assign the RectTransform of each player panel root. " +

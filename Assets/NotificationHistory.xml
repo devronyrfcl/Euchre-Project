@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NotificationHistory xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Notification id="77f9e9ba-aeb7-4ae0-9c4f-21569f2dd7eb" title="Balance Loaded" message="Your current Poker Chips balance is 4,800 PC." timestamp="2026-07-12 00:40" isRead="true" />
+  <Notification id="ad234043-7107-4fa9-b409-302d8c951937" title="Balance Loaded" message="Your current Poker Chips balance is 4,800 PC." timestamp="2026-07-12 00:40" isRead="true" />
+  <Notification id="133697d8-806e-4d14-9afb-8f4f3ff35d8c" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 00:40" isRead="true" />
+</NotificationHistory>

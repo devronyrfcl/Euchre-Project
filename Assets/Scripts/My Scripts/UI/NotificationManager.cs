@@ -4,7 +4,7 @@ using TMPro;
 using Lean.Gui;
 using System.Collections;
 
-public class NotificationManager : MonoBehaviour
+public class NotificationManagerInGame : MonoBehaviour
 {
     [SerializeField] private LeanWindow WarningMessagePanel;
     [SerializeField] private TMP_Text WarningMessageText;
