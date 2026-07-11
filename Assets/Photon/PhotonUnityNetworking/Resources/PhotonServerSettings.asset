@@ -66,6 +66,7 @@ MonoBehaviour:
   - RPC_TrumpPhase1Turn
   - RPC_TrumpPhase2Turn
   - RPC_TrumpSuitChosen
+  - RPC_ResetMatchTotals
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

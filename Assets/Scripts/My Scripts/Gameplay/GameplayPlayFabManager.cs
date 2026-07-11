@@ -461,6 +461,38 @@ public class GameplayPlayFabManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  SELECTING TRUMP INDICATOR
+    // ─────────────────────────────────────────────────────────────
+
+    public void SetSelectingTrump(int panelIdx)
+    {
+        for (int i = 0; i < playerPanels.Length; i++)
+            playerPanels[i]?.SetSelectingTrump(i == panelIdx);
+    }
+
+    public void ClearSelectingTrump()
+    {
+        for (int i = 0; i < playerPanels.Length; i++)
+            playerPanels[i]?.SetSelectingTrump(false);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  TRICK SCORE PER PLAYER
+    // ─────────────────────────────────────────────────────────────
+
+    public void SetPlayerTrickScore(int panelIdx, int tricks)
+    {
+        if (panelIdx < 0 || panelIdx >= playerPanels.Length) return;
+        playerPanels[panelIdx]?.SetTrickScore(tricks);
+    }
+
+    public void ResetAllTrickScores()
+    {
+        for (int i = 0; i < playerPanels.Length; i++)
+            playerPanels[i]?.ResetTrickScore();
+    }
+
+    // ─────────────────────────────────────────────────────────────
     //  ACCESSORS
     // ─────────────────────────────────────────────────────────────
 

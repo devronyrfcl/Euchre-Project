@@ -1,10 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using DG.Tweening;
 using ExitGames.Client.Photon;
 using Photon.Pun;
 using Photon.Realtime;
+using TMPro;
 using UnityEngine;
+using UnityEngine.Networking;
+using UnityEngine.UI;
 
 /// <summary>
 /// Full Photon PUN2 network manager for Euchre gameplay.
@@ -53,6 +57,20 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     [Header("=== SCORE DISPLAY ===")]
     [SerializeField] private TrickScoreDisplay trickDisplay;
+
+    [Header("=== INTRO LOADING PANEL ===")]
+    [SerializeField] private GameObject    allPlayerUICards;
+    [SerializeField] private GameObject    firstLoadingPanel;
+    [SerializeField] private Image         firstLoadingPanelBg;
+    [SerializeField] private RectTransform player1Card;
+    [SerializeField] private RectTransform player2Card;
+    [SerializeField] private RectTransform player3Card;
+    [SerializeField] private RectTransform player4Card;
+    [SerializeField] private RectTransform vsObject;
+    [SerializeField] private TMP_Text[]    loadingNameTexts   = new TMP_Text[4];
+    [SerializeField] private TMP_Text[]    loadingGPTexts     = new TMP_Text[4];
+    [SerializeField] private Image[]       loadingAvatarImages = new Image[4];
+
     // ─────────────────────────────────────────────────────────────
     //  Photon Property Keys
     // ─────────────────────────────────────────────────────────────
@@ -113,6 +131,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private int         _team2Score     = 0;
     private int         _team1Tricks    = 0;
     private int         _team2Tricks    = 0;
+    private Dictionary<int, int> _seatTricks = new Dictionary<int, int>();
     private const int   WIN_SCORE       = 10;
 
     // Cards
@@ -145,12 +164,42 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+
+        AudioManager.Instance.StopMusic("Music_1");
     }
 
     /// <summary>Called by GameplaySceneBootstrapper on Awake.</summary>
     public void Init(MatchConfig config)
     {
         _config = config;
+
+        // Loading panel — disable game UI, show intro panel
+        if (allPlayerUICards  != null) allPlayerUICards.SetActive(false);
+        if (firstLoadingPanel != null) firstLoadingPanel.SetActive(true);
+
+        if (firstLoadingPanelBg != null)
+        {
+            Color c = firstLoadingPanelBg.color;
+            c.a = 170f / 255f;
+            firstLoadingPanelBg.color = c;
+        }
+
+        // Slot 0 = me — fill instantly from config, no need to wait for Photon
+        if (loadingNameTexts.Length > 0 && loadingNameTexts[0] != null)
+            loadingNameTexts[0].text = config.localPlayer.displayName;
+        if (loadingGPTexts.Length > 0 && loadingGPTexts[0] != null)
+            loadingGPTexts[0].text = config.localPlayer.pokerChips.ToString("N0") + " PC";
+        StartCoroutine(FetchLoadingAvatar(0, config.localPlayer.avatarUrl));
+
+        // Slots 1-3 = others, show placeholder until they join
+        for (int i = 1; i < 4; i++)
+        {
+            if (i < loadingNameTexts.Length && loadingNameTexts[i] != null)
+                loadingNameTexts[i].text = "Joining...";
+            if (i < loadingGPTexts.Length && loadingGPTexts[i] != null)
+                loadingGPTexts[i].text = "0 PC";
+        }
+
         SetStatus("Connecting...");
         PhotonNetwork.ConnectUsingSettings();
     }
@@ -312,6 +361,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             if (!isBot)
                 RefreshOtherPlayerPanel(panelIdx, playFabId, displayName, pokerChips);
 
+            UpdateLoadingPanelSlot(seat, displayName, pokerChips);
+            StartCoroutine(FetchLoadingAvatar(seat, avatarUrl));
+
             Debug.Log($"[Network] Loaded existing player: {displayName} at seat {seat}");
         }
     }
@@ -420,6 +472,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         _seatToActor[seat] = actorNumber;
         _seatToName[seat] = displayName;
+
+        UpdateLoadingPanelSlot(seat, displayName, pokerChips);
+        StartCoroutine(FetchLoadingAvatar(seat, avatarUrl));
 
         bool isLocalPlayer = actorNumber == PhotonNetwork.LocalPlayer.ActorNumber;
 
@@ -569,6 +624,13 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _localSeat = seat;
         ExitGames.Client.Photon.Hashtable prop = new ExitGames.Client.Photon.Hashtable { { PROP_SEAT, seat } };
         PhotonNetwork.LocalPlayer.SetCustomProperties(prop);
+
+        if (_config != null)
+        {
+            UpdateLoadingPanelSlot(seat, _config.localPlayer.displayName, _config.localPlayer.pokerChips);
+            StartCoroutine(FetchLoadingAvatar(seat, _config.localPlayer.avatarUrl));
+        }
+
         Debug.Log($"[Network] Local seat: {seat}");
     }
 
@@ -621,7 +683,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         }
 
         if (_takenSeats.Count + _botSeats.Count >= 4)
-            photonView.RPC(nameof(RPC_StartTeamVote), RpcTarget.All);
+            StartCoroutine(DelayThen(() =>
+                photonView.RPC(nameof(RPC_StartTeamVote), RpcTarget.All), 1f));
     }
 
     private void ReplaceWithBot(Player leftPlayer)
@@ -653,9 +716,57 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _teamVoteNo    = 0;
         _localVoteDone = false;
 
+        StartCoroutine(IntroThenVote());
+    }
+
+    private IEnumerator IntroThenVote()
+    {
+        yield return StartCoroutine(PlayIntroAnimation());
+
         teamVoteUI?.Show(
             onYes: () => { if (!_localVoteDone) { _localVoteDone = true; CastVote(true);  } },
             onNo:  () => { if (!_localVoteDone) { _localVoteDone = true; CastVote(false); } });
+    }
+
+    private IEnumerator PlayIntroAnimation()
+    {
+        const float slideDuration = 0.45f;
+        const float slideDelay    = 0.12f;
+        const float slideDistance = 700f;
+        const float vsMoveUp      = 250f;
+        const float fadeDuration  = 0.45f;
+
+        // Player_1 & Player_3 slide out simultaneously
+        player1Card?.DOAnchorPosX(player1Card.anchoredPosition.x - slideDistance, slideDuration)
+            .SetEase(Ease.InCubic);
+        player3Card?.DOAnchorPosX(player3Card.anchoredPosition.x + slideDistance, slideDuration)
+            .SetEase(Ease.InCubic);
+
+        yield return new WaitForSeconds(slideDelay);
+
+        // Player_2 & Player_4 follow
+        player2Card?.DOAnchorPosX(player2Card.anchoredPosition.x - slideDistance, slideDuration)
+            .SetEase(Ease.InCubic);
+        player4Card?.DOAnchorPosX(player4Card.anchoredPosition.x + slideDistance, slideDuration)
+            .SetEase(Ease.InCubic);
+
+        yield return new WaitForSeconds(slideDelay);
+
+        // VS shoots upward
+        vsObject?.DOAnchorPosY(vsObject.anchoredPosition.y + vsMoveUp, 0.4f)
+            .SetEase(Ease.InCubic);
+
+        yield return new WaitForSeconds(slideDuration);
+
+        // Fade panel bg to transparent
+        if (firstLoadingPanelBg != null)
+            firstLoadingPanelBg.DOFade(0f, fadeDuration);
+
+        yield return new WaitForSeconds(fadeDuration);
+
+        // Swap UI
+        if (firstLoadingPanel != null) firstLoadingPanel.SetActive(false);
+        if (allPlayerUICards  != null) allPlayerUICards.SetActive(true);
     }
 
     private void CastVote(bool yes)
@@ -707,6 +818,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         playFabManager.SetTeamMode(teamMode);
         playFabManager.DeductBetOnMatchStart();
 
+        AudioManager.Instance.PlaySFX("Intro_1");
+
         Debug.Log($"[Network] Team mode result: {teamMode}");
 
         if (PhotonNetwork.IsMasterClient)
@@ -721,8 +834,17 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         _team1Score = 0;
         _team2Score = 0;
+        photonView.RPC(nameof(RPC_ResetMatchTotals), RpcTarget.All);
         int firstDealer = UnityEngine.Random.Range(0, 4);
         photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, firstDealer);
+    }
+
+    [PunRPC]
+    private void RPC_ResetMatchTotals()
+    {
+        _seatTricks.Clear();
+        for (int i = 0; i < 4; i++) _seatTricks[i] = 0;
+        playFabManager?.ResetAllTrickScores();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -751,9 +873,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         playFabManager.SetDealer(RemapSeatToPanel(dealerSeat));
         playFabManager.ClearTrump();
+        playFabManager?.ClearSelectingTrump();
 
         trickDisplay?.ResetTricks(_team1Score, _team2Score);
-
 
         if (PhotonNetwork.IsMasterClient)
             DealCards();
@@ -840,6 +962,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         SetState(GameState.TrumpPhase1);
         _turnSeat = activeSeat;
+        playFabManager?.SetSelectingTrump(RemapSeatToPanel(activeSeat));
 
         bool isMyTurn   = activeSeat == _localSeat;
         bool isDealer   = activeSeat == _dealerSeat;
@@ -903,12 +1026,12 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_TrumpOrdered(int pickerSeat, int suitInt)
     {
-        
         turnTimer?.StopTimer();
         char suit        = (char)suitInt;
         _trump           = suit;
         _trumpPickerSeat = pickerSeat;
 
+        playFabManager?.ClearSelectingTrump();
         trumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), suit);
         cardManager?.HideUpcard();
@@ -945,6 +1068,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _turnSeat = activeSeat;
 
         turnIndicator?.SetActiveTurn(RemapSeatToPanel(activeSeat));
+        playFabManager?.SetSelectingTrump(RemapSeatToPanel(activeSeat));
 
         bool isMyTurn = activeSeat == _localSeat;
         bool isDealer = activeSeat == _dealerSeat;
@@ -985,6 +1109,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _trump           = suitStr[0];
         _trumpPickerSeat = pickerSeat;
 
+        playFabManager?.ClearSelectingTrump();
         trumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), _trump);
         cardManager?.HideUpcard();
@@ -1198,20 +1323,23 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (winnerSeat % 2 == 0) _team1Tricks++;
         else _team2Tricks++;
 
+        if (!_seatTricks.ContainsKey(winnerSeat)) _seatTricks[winnerSeat] = 0;
+        _seatTricks[winnerSeat]++;
+
         _played.Clear();
         _trickOrder.Clear();
 
-        // UPDATE: fly cards to winner instead of just clearing
         int winnerPanelIndex = RemapSeatToPanel(winnerSeat);
+        int winnerSeatTricks = _seatTricks[winnerSeat];
+
         cardManager?.FlyCardsToWinner(winnerPanelIndex, onComplete: () =>
         {
-            // Everything that used to happen after ClearTableCards now happens
-            // inside this callback — after the animation finishes
-
             trickDisplay?.UpdateTrickScore(
                 _team1Tricks, _team2Tricks,
                 _team1Score, _team2Score,
                 _isTeamMode);
+
+            playFabManager?.SetPlayerTrickScore(winnerPanelIndex, winnerSeatTricks);
 
             SetStatus($"{SeatName(winnerSeat)} wins the trick!");
 
@@ -1719,6 +1847,35 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     // ─────────────────────────────────────────────────────────────
     //  HELPERS
     // ─────────────────────────────────────────────────────────────
+
+    private void UpdateLoadingPanelSlot(int seat, string displayName, int pokerChips)
+    {
+        if (seat < 0 || seat >= 4) return;
+        if (seat < loadingNameTexts.Length && loadingNameTexts[seat] != null)
+            loadingNameTexts[seat].text = displayName;
+        if (seat < loadingGPTexts.Length && loadingGPTexts[seat] != null)
+            loadingGPTexts[seat].text = pokerChips.ToString("N0") + " PC";
+    }
+
+    private IEnumerator FetchLoadingAvatar(int seat, string url)
+    {
+        if (seat < 0 || seat >= loadingAvatarImages.Length) yield break;
+        if (string.IsNullOrEmpty(url)) yield break;
+
+        Image target = loadingAvatarImages[seat];
+        if (target == null) yield break;
+
+        using UnityWebRequest www = UnityWebRequestTexture.GetTexture(url);
+        yield return www.SendWebRequest();
+
+        if (www.result == UnityWebRequest.Result.Success)
+        {
+            Texture2D tex = DownloadHandlerTexture.GetContent(www);
+            target.sprite = Sprite.Create(tex,
+                new Rect(0, 0, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f));
+        }
+    }
 
     /// <summary>
     /// Remaps absolute seat to UI panel index relative to local player.

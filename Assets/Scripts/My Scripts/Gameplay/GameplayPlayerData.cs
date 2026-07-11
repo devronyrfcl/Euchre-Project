@@ -1,4 +1,5 @@
 using System.Collections;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -39,6 +40,12 @@ public class GameplayPlayerData : MonoBehaviour
     [Header("=== GO ALONE BADGE ===")]
     [SerializeField] private GameObject goAloneBadge;        // shown when this player goes alone
 
+    [Header("=== SELECTING TRUMP ===")]
+    [SerializeField] private GameObject selectingTrumpIndicator;
+
+    [Header("=== TRICK SCORE ===")]
+    [SerializeField] private TMP_Text trickScoreText;
+
     [Header("=== TIMER VISUAL ===")]
     [SerializeField] private Image timerVisualImage;
 
@@ -55,6 +62,8 @@ public class GameplayPlayerData : MonoBehaviour
     public int    PokerChips  { get; private set; } = 0;
     public int    Seat        { get; private set; } = -1;
     public bool   IsBot       { get; private set; } = false;
+
+    private Tween _trumpPulseTween;
 
     // ─────────────────────────────────────────────────────────────
     //  Setup
@@ -76,7 +85,9 @@ public class GameplayPlayerData : MonoBehaviour
         SetTrump(' ', false);
         SetTeamBadge(false, "");
         SetGoAlone(false);
-        ResetTimerVisual(); // ← ADD THIS
+        ResetTimerVisual();
+        ResetTrickScore();
+        SetSelectingTrump(false);
     }
 
     /// <summary>Load avatar from URL. Falls back to default if empty or failed.</summary>
@@ -160,6 +171,32 @@ public class GameplayPlayerData : MonoBehaviour
         SetTrump(' ', false);
     }
 
+    public void SetSelectingTrump(bool selecting)
+    {
+        if (selectingTrumpIndicator == null) return;
+
+        if (selecting)
+        {
+            selectingTrumpIndicator.SetActive(true);
+            _trumpPulseTween?.Kill();
+            selectingTrumpIndicator.transform.localScale = Vector3.one;
+            _trumpPulseTween = selectingTrumpIndicator.transform
+                .DOScale(1.1f, 0.4f)
+                .SetEase(Ease.InOutSine)
+                .SetLoops(-1, LoopType.Yoyo);
+        }
+        else
+        {
+            _trumpPulseTween?.Kill();
+            _trumpPulseTween = null;
+            if (selectingTrumpIndicator != null)
+            {
+                selectingTrumpIndicator.transform.localScale = Vector3.one;
+                selectingTrumpIndicator.SetActive(false);
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     //  Team / Go Alone Badges
     // ─────────────────────────────────────────────────────────────
@@ -225,6 +262,22 @@ public class GameplayPlayerData : MonoBehaviour
         {
             ApplyDefaultAvatar();
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Trick Score
+    // ─────────────────────────────────────────────────────────────
+
+    public void SetTrickScore(int tricks)
+    {
+        if (trickScoreText != null)
+            trickScoreText.text = tricks.ToString();
+    }
+
+    public void ResetTrickScore()
+    {
+        if (trickScoreText != null)
+            trickScoreText.text = "0";
     }
 
     /// <summary>

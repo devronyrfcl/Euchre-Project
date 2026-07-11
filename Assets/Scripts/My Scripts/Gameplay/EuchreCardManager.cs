@@ -38,8 +38,7 @@ public class EuchreCardManager : MonoBehaviour
     [SerializeField] private List<Sprite> cardSprites = new List<Sprite>();
     [SerializeField] private Sprite       cardBackSprite;
 
-    [Header("=== PLAY BUTTON ===")]
-    [SerializeField] private GameObject playCardButton; // assign in Inspector
+    
 
     [Header("=== Error Panel ===")]
     [SerializeField] private NotificationManagerInGame notificationManager;
@@ -399,9 +398,7 @@ public class EuchreCardManager : MonoBehaviour
         foreach (EuchreCardUI card in _handCards)
             if (card != null) card.SetInteractable(enabled);
 
-        // Show/hide play button with turn state
-        if (playCardButton != null)
-            playCardButton.SetActive(enabled);
+        
     }
 
     /// <summary>Called by EuchreCardUI when local player taps a card.</summary>
@@ -409,7 +406,14 @@ public class EuchreCardManager : MonoBehaviour
     {
         if (!_selectionEnabled) return;
 
-        // Deselect all others
+        if (tappedCard.IsSelected)
+        {
+            // Second tap on already-selected card → play it
+            ConfirmPlaySelectedCard();
+            return;
+        }
+
+        // First tap → select this card, deselect others
         foreach (EuchreCardUI card in _handCards)
             if (card != null && card != tappedCard)
                 card.SetSelected(false);
@@ -775,6 +779,8 @@ public class EuchreCardManager : MonoBehaviour
             particleRt.localScale = Vector3.one;
             particleRt.localRotation = Quaternion.identity;
         }
+
+        AudioManager.Instance.PlaySFX("TrickWin_1");
 
         Destroy(particle, 5f);
     }
