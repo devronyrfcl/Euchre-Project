@@ -63,7 +63,8 @@ public class GameplayPlayerData : MonoBehaviour
     public int    Seat        { get; private set; } = -1;
     public bool   IsBot       { get; private set; } = false;
 
-    private Tween _trumpPulseTween;
+    private Tween  _trumpPulseTween;
+    private string _pendingAvatarUrl;
 
     // ─────────────────────────────────────────────────────────────
     //  Setup
@@ -99,7 +100,24 @@ public class GameplayPlayerData : MonoBehaviour
             return;
         }
 
+        if (!gameObject.activeInHierarchy)
+        {
+            // Object is inactive — store URL and fetch when it becomes active
+            _pendingAvatarUrl = url;
+            return;
+        }
+
+        _pendingAvatarUrl = null;
         StartCoroutine(FetchAvatar(url));
+    }
+
+    private void OnEnable()
+    {
+        if (!string.IsNullOrEmpty(_pendingAvatarUrl))
+        {
+            StartCoroutine(FetchAvatar(_pendingAvatarUrl));
+            _pendingAvatarUrl = null;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

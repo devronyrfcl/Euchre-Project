@@ -74,6 +74,14 @@ public class EuchreCardManager : MonoBehaviour
         new Vector2( 255f,   17f)    // Seat 3 — right enemy
     };
 
+    private static readonly float[] DEAL_THROW_ROTATIONS_Z = new float[]
+    {
+        0f,   // Seat 0 — me
+        0f,   // Seat 1 — partner up
+        -90f,   // Seat 2 — left enemy
+        90f    // Seat 3 — right enemy
+    };
+
     // Where local player's received cards go before revealing hand
     private static readonly Vector2 LOCAL_RECEIVE_POS = new Vector2(0f, -147f);
 
@@ -91,6 +99,17 @@ public class EuchreCardManager : MonoBehaviour
     };
 
     private static readonly Vector3 TABLE_CARD_ROTATION = new Vector3(35f, 0f, 0f);
+
+    private static readonly float[] TABLE_CARD_ROTATIONS_Z = new float[]
+    {
+        0f,   // me
+        0f,   // partner
+        90f,   // left
+        -90f    // right
+    };
+
+    [Header("=== TABLE CARD ROTATION ===")]
+    [SerializeField] private float tableCardRotationZ = 0f;
 
     // ─────────────────────────────────────────────────────────────
     //  Hand Card Positions (local player's 5 cards in hand)
@@ -202,8 +221,8 @@ public class EuchreCardManager : MonoBehaviour
                     ? LOCAL_RECEIVE_POS
                     : DEAL_THROW_POSITIONS[panel];
 
-                SpawnShuffleCard(dealerOrigin, destination);
-                yield return new WaitForSeconds(0.08f);
+                SpawnShuffleCard(dealerOrigin, destination, panel);
+                yield return new WaitForSeconds(0.22f);
             }
         }
 
@@ -235,15 +254,21 @@ public class EuchreCardManager : MonoBehaviour
         }
     }
 
-    private void SpawnShuffleCard(Vector2 from, Vector2 to)
+    private void SpawnShuffleCard(Vector2 from, Vector2 to, int panelIndex = 0)
     {
         GameObject obj = Instantiate(shuffleCardPrefab, shufflecardHolder);
         RectTransform rt = obj.GetComponent<RectTransform>();
         rt.anchoredPosition = from;
         rt.localScale       = Vector3.one;
 
+        float rotZ = panelIndex < DEAL_THROW_ROTATIONS_Z.Length
+            ? DEAL_THROW_ROTATIONS_Z[panelIndex] : 0f;
+        rt.localRotation = Quaternion.Euler(0f, 0f, rotZ);
+
+        AudioManager.Instance.PlaySFX("GiveCard");
+
         // DOTween move to destination
-        rt.DOAnchorPos(to, 0.25f).SetEase(Ease.OutCubic);
+        rt.DOAnchorPos(to, 0.38f).SetEase(Ease.OutCubic);
 
         // Keep shuffle cards; they are removed when hand is revealed
         StartCoroutine(DestroyAfter(obj, 2.5f));
@@ -534,7 +559,7 @@ public class EuchreCardManager : MonoBehaviour
 
         rt.anchoredPosition = startPos;
         rt.sizeDelta        = new Vector2(56f, 76f);
-        rt.localRotation    = Quaternion.Euler(TABLE_CARD_ROTATION);
+        rt.localRotation    = Quaternion.Euler(35f, 0f, TABLE_CARD_ROTATIONS_Z[panelIndex]);
 
         // Show front face
         Image img = obj.GetComponent<Image>();

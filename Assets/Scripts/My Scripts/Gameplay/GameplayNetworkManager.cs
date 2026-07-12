@@ -166,6 +166,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         Instance = this;
 
         AudioManager.Instance.StopMusic("Music_1");
+        //AudioManager.Instance.PlayMusic("Music_2");
     }
 
     /// <summary>Called by GameplaySceneBootstrapper on Awake.</summary>
@@ -361,8 +362,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             if (!isBot)
                 RefreshOtherPlayerPanel(panelIdx, playFabId, displayName, pokerChips);
 
-            UpdateLoadingPanelSlot(seat, displayName, pokerChips);
-            StartCoroutine(FetchLoadingAvatar(seat, avatarUrl));
+            int loadingSlot = RemapSeatToPanel(seat);
+            UpdateLoadingPanelSlot(loadingSlot, displayName, pokerChips);
+            StartCoroutine(FetchLoadingAvatar(loadingSlot, avatarUrl));
 
             Debug.Log($"[Network] Loaded existing player: {displayName} at seat {seat}");
         }
@@ -473,9 +475,6 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _seatToActor[seat] = actorNumber;
         _seatToName[seat] = displayName;
 
-        UpdateLoadingPanelSlot(seat, displayName, pokerChips);
-        StartCoroutine(FetchLoadingAvatar(seat, avatarUrl));
-
         bool isLocalPlayer = actorNumber == PhotonNetwork.LocalPlayer.ActorNumber;
 
         if (isLocalPlayer)
@@ -486,23 +485,27 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         else if (isBot)
         {
             if (!_botSeats.Contains(seat)) _botSeats.Add(seat);
+
+            // Slot relative to local player — never overwrites slot 0 (me)
+            int loadingSlot = RemapSeatToPanel(seat);
+            UpdateLoadingPanelSlot(loadingSlot, displayName, pokerChips);
         }
         else
         {
             if (!_takenSeats.Contains(seat)) _takenSeats.Add(seat);
+
+            int loadingSlot = RemapSeatToPanel(seat);
+            UpdateLoadingPanelSlot(loadingSlot, displayName, pokerChips);
+            StartCoroutine(FetchLoadingAvatar(loadingSlot, avatarUrl));
         }
 
-        // ── FIX: always update panel for non-local players ──────────
         if (!isLocalPlayer)
         {
             int panelIdx = RemapSeatToPanel(seat);
 
-            // Immediately set name and PC from RPC data (available instantly)
             playFabManager?.SetupOtherPlayer(
                 panelIdx, playFabId, displayName, pokerChips, avatarUrl, isBot);
 
-            // Then refresh from PlayFab for accurate name + avatar
-            // (RPC data is reliable but avatar needs a fresh fetch)
             if (!isBot)
                 RefreshOtherPlayerPanel(panelIdx, playFabId, displayName, pokerChips);
         }
@@ -625,11 +628,6 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         ExitGames.Client.Photon.Hashtable prop = new ExitGames.Client.Photon.Hashtable { { PROP_SEAT, seat } };
         PhotonNetwork.LocalPlayer.SetCustomProperties(prop);
 
-        if (_config != null)
-        {
-            UpdateLoadingPanelSlot(seat, _config.localPlayer.displayName, _config.localPlayer.pokerChips);
-            StartCoroutine(FetchLoadingAvatar(seat, _config.localPlayer.avatarUrl));
-        }
 
         Debug.Log($"[Network] Local seat: {seat}");
     }
@@ -1032,6 +1030,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _trumpPickerSeat = pickerSeat;
 
         playFabManager?.ClearSelectingTrump();
+        AudioManager.Instance.PlaySFX("TrumpSelected");
         trumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), suit);
         cardManager?.HideUpcard();
@@ -1110,6 +1109,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _trumpPickerSeat = pickerSeat;
 
         playFabManager?.ClearSelectingTrump();
+        AudioManager.Instance.PlaySFX("TrumpSelected");
         trumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), _trump);
         cardManager?.HideUpcard();
@@ -1175,7 +1175,10 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         bool isMyTurn = activeSeat == _localSeat;
 
-        turnTimer?.StartTimer(isMyTurn, RemapSeatToPanel(activeSeat)); // ← add panel index
+        if (isMyTurn)
+            AudioManager.Instance.PlaySFX("MyTrun");
+
+        turnTimer?.StartTimer(isMyTurn, RemapSeatToPanel(activeSeat));
 
         SetStatus(isMyTurn
             ? "Your turn — select a card"
@@ -1210,11 +1213,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_CardPlayed(int fromSeat, string cardType)
     {
-        
-        // ADD THIS at the very top
         turnTimer?.StopTimer();
+        AudioManager.Instance.PlaySFX("PlayCard");
 
-        
         _played.Add(cardType);
 
         // Track trick order
@@ -1847,6 +1848,16 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     // ─────────────────────────────────────────────────────────────
     //  HELPERS
     // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Called by GameplayPlayFabManager after it receives fresh local player
+    /// data from PlayFab, so the loading panel shows accurate info.
+    /// </summary>
+    public void UpdateLocalPlayerLoadingSlot(string displayName, string avatarUrl, int pokerChips)
+    {
+        UpdateLoadingPanelSlot(0, displayName, pokerChips);
+        StartCoroutine(FetchLoadingAvatar(0, avatarUrl));
+    }
 
     private void UpdateLoadingPanelSlot(int seat, string displayName, int pokerChips)
     {

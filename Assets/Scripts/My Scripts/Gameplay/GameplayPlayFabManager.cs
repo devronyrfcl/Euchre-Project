@@ -117,32 +117,40 @@ public class GameplayPlayFabManager : MonoBehaviour
                 string displayName = result.PlayerProfile?.DisplayName;
                 string avatarUrl   = result.PlayerProfile?.AvatarUrl;
 
-                // Override name if PlayFab returned one
-                if (!string.IsNullOrEmpty(displayName))
-                {
-                    playerPanels[0].Setup(
-                        _config.localPlayer.playFabId,
-                        displayName,
-                        _config.localPlayer.pokerChips,
-                        seat: 0,
-                        isBot: false);
-                }
+                string finalName = !string.IsNullOrEmpty(displayName)
+                    ? displayName
+                    : _config.localPlayer.displayName;
 
-                // Load avatar — prefer PlayFab, fall back to config
                 string urlToLoad = !string.IsNullOrEmpty(avatarUrl)
                     ? avatarUrl
                     : _config.localPlayer.avatarUrl;
 
+                // Update game panel (deferred to OnEnable if inactive)
+                playerPanels[0].Setup(
+                    _config.localPlayer.playFabId,
+                    finalName,
+                    _config.localPlayer.pokerChips,
+                    seat: 0,
+                    isBot: false);
                 playerPanels[0].LoadAvatar(urlToLoad);
+
+                // Push fresh data to loading panel immediately — it is active
+                GameplayNetworkManager.Instance?.UpdateLocalPlayerLoadingSlot(
+                    finalName, urlToLoad, _config.localPlayer.pokerChips);
             },
             error =>
             {
                 Debug.LogWarning("[GameplayPlayFabManager] Profile fetch failed: "
                             + error.GenerateErrorReport());
 
-                // Fall back to whatever config has
+                string fallbackUrl = _config.localPlayer.avatarUrl;
+
                 if (playerPanels[0] != null)
-                    playerPanels[0].LoadAvatar(_config.localPlayer.avatarUrl);
+                    playerPanels[0].LoadAvatar(fallbackUrl);
+
+                // Still push config data to loading panel as fallback
+                GameplayNetworkManager.Instance?.UpdateLocalPlayerLoadingSlot(
+                    _config.localPlayer.displayName, fallbackUrl, _config.localPlayer.pokerChips);
             });
     }
 

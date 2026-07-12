@@ -1,15 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <NotificationHistory xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Notification id="cb8cafe2-3856-46af-b207-bd9bce5ccc08" title="Balance Loaded" message="Your current Poker Chips balance is 2,300 PC." timestamp="2026-07-12 07:04" isRead="false" />
+  <Notification id="0a0da56a-909c-4e98-bd55-5dd97e015d89" title="Balance Loaded" message="Your current Poker Chips balance is 2,300 PC." timestamp="2026-07-12 07:04" isRead="false" />
+  <Notification id="abde07e9-c22a-4a9e-860f-5e4c4c9c2de7" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 07:04" isRead="false" />
+  <Notification id="33b39b77-5b54-4f9d-a05c-aba0499c5d12" title="Balance Loaded" message="Your current Poker Chips balance is 2,400 PC." timestamp="2026-07-12 06:53" isRead="false" />
+  <Notification id="fd971415-3e5f-4184-af49-be2a49fa3180" title="Balance Loaded" message="Your current Poker Chips balance is 2,400 PC." timestamp="2026-07-12 06:53" isRead="false" />
+  <Notification id="535f347a-8b35-4df6-a8ce-9b1563f2a97e" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:53" isRead="false" />
+  <Notification id="f0d9bbcc-bfac-48d9-b975-b8d752d8366a" title="Balance Loaded" message="Your current Poker Chips balance is 2,500 PC." timestamp="2026-07-12 06:52" isRead="false" />
+  <Notification id="0fcb3ac7-fbb0-49d9-92cc-e012cbd31fdc" title="Balance Loaded" message="Your current Poker Chips balance is 2,500 PC." timestamp="2026-07-12 06:52" isRead="false" />
+  <Notification id="d8cdfb38-fa71-4662-93d1-aa422d7aa54d" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:52" isRead="false" />
+  <Notification id="f6b14473-042d-4ac8-bb9e-c4c3191d6d30" title="Balance Loaded" message="Your current Poker Chips balance is 2,600 PC." timestamp="2026-07-12 06:48" isRead="false" />
+  <Notification id="2e6ad67a-c74c-4bf0-9a9e-4a6cf27e025d" title="Balance Loaded" message="Your current Poker Chips balance is 2,600 PC." timestamp="2026-07-12 06:48" isRead="false" />
+  <Notification id="8cf80391-0f66-4264-b425-2619ff687baf" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:48" isRead="false" />
+  <Notification id="247b4558-8ca9-41bd-b542-cb84af3b9704" title="Balance Loaded" message="Your current Poker Chips balance is 2,700 PC." timestamp="2026-07-12 06:42" isRead="false" />
+  <Notification id="d686a724-c233-4730-96e1-9b43729b9483" title="Balance Loaded" message="Your current Poker Chips balance is 2,700 PC." timestamp="2026-07-12 06:42" isRead="false" />
+  <Notification id="ee7fa267-6c69-4597-9db7-63937c00e0f3" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:42" isRead="false" />
+  <Notification id="cb7fabc1-5197-4eed-9769-31dad304057c" title="Balance Loaded" message="Your current Poker Chips balance is 2,800 PC." timestamp="2026-07-12 06:40" isRead="false" />
+  <Notification id="b4846c97-55f7-4100-80f4-343ca1864478" title="Balance Loaded" message="Your current Poker Chips balance is 2,800 PC." timestamp="2026-07-12 06:40" isRead="false" />
+  <Notification id="af0fe536-dc5b-42b5-9d8b-f14d67f77cda" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:40" isRead="false" />
+  <Notification id="72ac974b-fc1f-4f53-bec5-6f1738af73ef" title="Balance Loaded" message="Your current Poker Chips balance is 2,900 PC." timestamp="2026-07-12 06:39" isRead="false" />
+  <Notification id="d15f91b6-bcc6-49da-8bfe-92bf7972352f" title="Balance Loaded" message="Your current Poker Chips balance is 2,900 PC." timestamp="2026-07-12 06:39" isRead="false" />
+  <Notification id="6deb9711-0429-400f-9945-d93fdbec7fd0" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:39" isRead="false" />
+  <Notification id="ccc21872-1078-47d8-aae7-e80bb6553cf2" title="Balance Loaded" message="Your current Poker Chips balance is 3,000 PC." timestamp="2026-07-12 06:28" isRead="false" />
+  <Notification id="2512ed48-5530-4929-8775-e47685c690f9" title="Balance Loaded" message="Your current Poker Chips balance is 3,000 PC." timestamp="2026-07-12 06:28" isRead="false" />
+  <Notification id="86e157a8-4e8e-4e98-8221-c7c09c2a5a5d" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:28" isRead="false" />
+  <Notification id="651dc864-0c88-4dab-a29e-5889a997f98c" title="Balance Loaded" message="Your current Poker Chips balance is 3,100 PC." timestamp="2026-07-12 06:24" isRead="false" />
+  <Notification id="011440de-969e-4ff4-8604-0f159052cff0" title="Balance Loaded" message="Your current Poker Chips balance is 3,100 PC." timestamp="2026-07-12 06:24" isRead="false" />
+  <Notification id="ed3961f4-1fe3-4028-b635-9e306521f039" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:24" isRead="false" />
+  <Notification id="b9c07614-77cd-4394-a432-f6f94eed482c" title="Balance Loaded" message="Your current Poker Chips balance is 3,200 PC." timestamp="2026-07-12 06:17" isRead="false" />
+  <Notification id="eac8cd1f-bcb0-4064-90d4-fefdbfd53d2a" title="Balance Loaded" message="Your current Poker Chips balance is 3,200 PC." timestamp="2026-07-12 06:17" isRead="false" />
+  <Notification id="bb9cceb1-61c5-48f5-9be8-6339eaab9142" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:17" isRead="false" />
+  <Notification id="5d62da84-9bec-4481-b4ee-2ff49b74183d" title="Balance Loaded" message="Your current Poker Chips balance is 3,300 PC." timestamp="2026-07-12 06:06" isRead="false" />
+  <Notification id="5fa3bc8e-2e2c-4510-9bfb-4a4ab97290a1" title="Balance Loaded" message="Your current Poker Chips balance is 3,300 PC." timestamp="2026-07-12 06:06" isRead="false" />
+  <Notification id="fed8e5b9-68d5-400f-9e02-e3499189b7f2" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:06" isRead="false" />
+  <Notification id="19ba7fff-adf5-458e-be40-88a8e740fd5d" title="Balance Loaded" message="Your current Poker Chips balance is 3,400 PC." timestamp="2026-07-12 06:04" isRead="false" />
+  <Notification id="632b1c82-4b3f-4d17-af0b-9ff2e35051eb" title="Balance Loaded" message="Your current Poker Chips balance is 3,400 PC." timestamp="2026-07-12 06:04" isRead="false" />
+  <Notification id="b8d4ef10-6339-4447-b1f0-5932c7b95ce6" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:04" isRead="false" />
+  <Notification id="06bb6d65-433c-429e-958e-68a4af5c4117" title="Balance Loaded" message="Your current Poker Chips balance is 3,400 PC." timestamp="2026-07-12 06:03" isRead="false" />
+  <Notification id="c33cd12b-4b7b-4f8a-8546-d7fa57e48a59" title="Balance Loaded" message="Your current Poker Chips balance is 3,400 PC." timestamp="2026-07-12 06:03" isRead="false" />
+  <Notification id="7a907429-3294-4448-882c-b3fe4a494b8a" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 06:03" isRead="false" />
+  <Notification id="3b3373c8-4747-4ff5-bf9d-e7d36e3ab3f7" title="Balance Loaded" message="Your current Poker Chips balance is 3,500 PC." timestamp="2026-07-12 05:47" isRead="false" />
+  <Notification id="b9223bf2-8ce2-4c44-b00d-61eb18c1cfe5" title="Balance Loaded" message="Your current Poker Chips balance is 3,500 PC." timestamp="2026-07-12 05:47" isRead="false" />
+  <Notification id="2a7c4562-0b1e-46b0-b399-a6a2e192120f" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 05:47" isRead="false" />
+  <Notification id="6b586f75-4f93-49fe-aa41-be27afc7ba40" title="Balance Loaded" message="Your current Poker Chips balance is 3,600 PC." timestamp="2026-07-12 05:42" isRead="false" />
+  <Notification id="3c0db9df-0574-483f-b92b-49e1bb566f9b" title="Balance Loaded" message="Your current Poker Chips balance is 3,600 PC." timestamp="2026-07-12 05:42" isRead="false" />
+  <Notification id="639c8424-f5c2-42fe-91ac-a33db6e0652e" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 05:42" isRead="false" />
   <Notification id="8714d95e-3a77-4649-b813-833dc170a721" title="Balance Loaded" message="Your current Poker Chips balance is 3,600 PC." timestamp="2026-07-12 05:38" isRead="false" />
   <Notification id="e5dec7ff-f292-4b77-811b-85208399e92e" title="Balance Loaded" message="Your current Poker Chips balance is 3,600 PC." timestamp="2026-07-12 05:38" isRead="false" />
   <Notification id="23b4951c-abe6-44ac-97fe-5833b34109a4" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 05:38" isRead="false" />
   <Notification id="4e3f64c2-6099-4717-8a71-28b54c446740" title="Balance Loaded" message="Your current Poker Chips balance is 3,600 PC." timestamp="2026-07-12 05:34" isRead="false" />
   <Notification id="1ce4655e-4c24-4e34-8084-d449b008a2c4" title="Balance Loaded" message="Your current Poker Chips balance is 3,600 PC." timestamp="2026-07-12 05:34" isRead="false" />
-  <Notification id="9c68118f-b25b-46d4-8bf9-7cbf94c818f1" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 05:34" isRead="false" />
-  <Notification id="ef726a6c-481c-4729-9495-254e4cbd289a" title="Balance Loaded" message="Your current Poker Chips balance is 3,700 PC." timestamp="2026-07-12 05:33" isRead="false" />
-  <Notification id="a68d7691-573a-4c67-a9e4-d63f8031e14c" title="Balance Loaded" message="Your current Poker Chips balance is 3,700 PC." timestamp="2026-07-12 05:33" isRead="false" />
-  <Notification id="4af13c2f-9c99-4dd7-9051-4a26a936b61b" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 05:33" isRead="false" />
-  <Notification id="62552bbb-11e3-4699-aa7b-387e981a5501" title="Balance Loaded" message="Your current Poker Chips balance is 3,700 PC." timestamp="2026-07-12 05:30" isRead="false" />
-  <Notification id="0a585733-c59e-4010-a3ec-e374a93086c7" title="Balance Loaded" message="Your current Poker Chips balance is 3,700 PC." timestamp="2026-07-12 05:30" isRead="false" />
-  <Notification id="23a170b7-c9a1-43b6-ac0e-94bf2ba74492" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-12 05:30" isRead="false" />
 </NotificationHistory>
