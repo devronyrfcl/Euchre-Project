@@ -70,6 +70,16 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private TMP_Text[]    loadingNameTexts   = new TMP_Text[4];
     [SerializeField] private TMP_Text[]    loadingGPTexts     = new TMP_Text[4];
     [SerializeField] private Image[]       loadingAvatarImages = new Image[4];
+    [SerializeField] private TMP_Text      matchTitleText;
+    [Header("=== GAME OVER (loading panel) ===")]
+    [SerializeField] private GameObject    team1PointObj;
+    [SerializeField] private TMP_Text      team1FinalScoreText;
+    [SerializeField] private GameObject    team2PointObj;
+    [SerializeField] private TMP_Text      team2FinalScoreText;
+    [SerializeField] private GameObject    winnerTagTeam1;
+    [SerializeField] private GameObject    winnerTagTeam2;
+    [SerializeField] private GameObject    spreadFallParticle;
+    [SerializeField] private GameObject    mainMenuButtonObj;
 
     // ─────────────────────────────────────────────────────────────
     //  Photon Property Keys
@@ -134,6 +144,10 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private Dictionary<int, int> _seatTricks = new Dictionary<int, int>();
     private const int   WIN_SCORE       = 10;
 
+    // Cached positions for game-over return animation
+    private Vector2 _p1InitPos, _p2InitPos, _p3InitPos, _p4InitPos;
+    private Vector2 _vsInitPos;
+
     // Cards
     private Dictionary<int, List<string>> _hands   = new Dictionary<int, List<string>>();
     // Prevents multiple bot coroutines running simultaneously
@@ -183,6 +197,30 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             Color c = firstLoadingPanelBg.color;
             c.a = 170f / 255f;
             firstLoadingPanelBg.color = c;
+        }
+
+        // Cache card positions before intro animation moves them
+        _p1InitPos = player1Card != null ? player1Card.anchoredPosition : Vector2.zero;
+        _p2InitPos = player2Card != null ? player2Card.anchoredPosition : Vector2.zero;
+        _p3InitPos = player3Card != null ? player3Card.anchoredPosition : Vector2.zero;
+        _p4InitPos = player4Card != null ? player4Card.anchoredPosition : Vector2.zero;
+        _vsInitPos = vsObject    != null ? vsObject.anchoredPosition    : Vector2.zero;
+
+        // Match title
+        if (matchTitleText != null)
+            matchTitleText.text = GetMatchTitle(config);
+
+        // Disable game-over objects until match ends
+        if (team1PointObj      != null) team1PointObj.SetActive(false);
+        if (team2PointObj      != null) team2PointObj.SetActive(false);
+        if (winnerTagTeam1     != null) winnerTagTeam1.SetActive(false);
+        if (winnerTagTeam2     != null) winnerTagTeam2.SetActive(false);
+        if (spreadFallParticle != null) spreadFallParticle.SetActive(false);
+        if (mainMenuButtonObj  != null)
+        {
+            mainMenuButtonObj.SetActive(false);
+            Button btn = mainMenuButtonObj.GetComponent<Button>();
+            if (btn != null) btn.onClick.AddListener(OnMainMenu);
         }
 
         // Slot 0 = me — fill instantly from config, no need to wait for Photon
@@ -1606,7 +1644,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             onMainMenu:   OnMainMenu);
         */
 
-        gameOverUI?.Show(endData, OnRematch, OnMainMenu);
+        ShowMatchOverOnLoadingPanel(winnerTeam);
 
         
     }
@@ -1933,4 +1971,77 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _hands.ContainsKey(_localSeat)
             ? new List<string>(_hands[_localSeat])
             : new List<string>();
+
+    // ─────────────────────────────────────────────────────────────
+    //  MATCH OVER — loading panel game over screen
+    // ─────────────────────────────────────────────────────────────
+
+    private void ShowMatchOverOnLoadingPanel(int winnerTeam)
+    {
+        if (allPlayerUICards  != null) allPlayerUICards.SetActive(false);
+        if (firstLoadingPanel != null) firstLoadingPanel.SetActive(true);
+
+        // Start bg fully transparent so it fades in
+        if (firstLoadingPanelBg != null)
+        {
+            Color c = firstLoadingPanelBg.color;
+            c.a = 0f;
+            firstLoadingPanelBg.color = c;
+        }
+
+        StartCoroutine(ShowMatchOverCoroutine(winnerTeam));
+    }
+
+    private IEnumerator ShowMatchOverCoroutine(int winnerTeam)
+    {
+        const float slideDuration = 0.45f;
+        const float slideDelay    = 0.12f;
+
+        // Fade panel bg back in
+        firstLoadingPanelBg?.DOFade(170f / 255f, 0.35f);
+
+        // Slide player cards back to initial positions
+        player1Card?.DOAnchorPosX(_p1InitPos.x, slideDuration).SetEase(Ease.OutCubic);
+        player3Card?.DOAnchorPosX(_p3InitPos.x, slideDuration).SetEase(Ease.OutCubic);
+
+        yield return new WaitForSeconds(slideDelay);
+
+        player2Card?.DOAnchorPosX(_p2InitPos.x, slideDuration).SetEase(Ease.OutCubic);
+        player4Card?.DOAnchorPosX(_p4InitPos.x, slideDuration).SetEase(Ease.OutCubic);
+
+        // VS drops back to initial position
+        vsObject?.DOAnchorPosY(_vsInitPos.y, 0.4f).SetEase(Ease.OutCubic);
+
+        yield return new WaitForSeconds(slideDuration + 0.2f);
+
+        // Winner tag (pulsing scale animation)
+        GameObject winnerTag = winnerTeam == 1 ? winnerTagTeam1 : winnerTagTeam2;
+        if (winnerTag != null)
+        {
+            winnerTag.SetActive(true);
+            winnerTag.transform.localScale = Vector3.one;
+            winnerTag.transform.DOScale(1.1f, 0.4f)
+                .SetEase(Ease.InOutSine)
+                .SetLoops(-1, LoopType.Yoyo);
+        }
+
+        // Final scores
+        if (team1FinalScoreText != null) team1FinalScoreText.text = _team1Score.ToString();
+        if (team2FinalScoreText != null) team2FinalScoreText.text = _team2Score.ToString();
+        if (team1PointObj != null) team1PointObj.SetActive(true);
+        if (team2PointObj != null) team2PointObj.SetActive(true);
+
+        // Particle effect and main menu button
+        if (spreadFallParticle != null) spreadFallParticle.SetActive(true);
+        if (mainMenuButtonObj  != null) mainMenuButtonObj.SetActive(true);
+    }
+
+    private string GetMatchTitle(MatchConfig config)
+    {
+        if (config.matchType == "private")    return "Custom Match";
+        if (config.matchType == "solo")       return "Casual Game";
+        if (config.matchType == "tournament") return "Tournament";
+        if (config.gameMode  == "freeforall") return "Tournament";
+        return "Rated Match";
+    }
 }
