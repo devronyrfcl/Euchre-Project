@@ -71,6 +71,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private TMP_Text[]    loadingGPTexts     = new TMP_Text[4];
     [SerializeField] private Image[]       loadingAvatarImages = new Image[4];
     [SerializeField] private TMP_Text      matchTitleText;
+    [SerializeField] private TMP_Text      roomCodeDisplayText;
+    [SerializeField] private GameObject roomCodeDisplayPanel;
     [Header("=== GAME OVER (loading panel) ===")]
     [SerializeField] private GameObject    team1PointObj;
     [SerializeField] private TMP_Text      team1FinalScoreText;
@@ -210,6 +212,16 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (matchTitleText != null)
             matchTitleText.text = GetMatchTitle(config);
 
+        // Room code — only shown for private/custom matches
+        if (roomCodeDisplayText != null)
+        {
+            bool isCustom = config.matchType == "private" && !string.IsNullOrEmpty(config.roomCode);
+            roomCodeDisplayText.gameObject.SetActive(isCustom);
+            roomCodeDisplayPanel.SetActive(isCustom);
+            if (isCustom)
+                roomCodeDisplayText.text = "Room Code:" + config.roomCode;
+        }
+
         // Disable game-over objects until match ends
         if (team1PointObj      != null) team1PointObj.SetActive(false);
         if (team2PointObj      != null) team2PointObj.SetActive(false);
@@ -264,9 +276,16 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         PhotonNetwork.LocalPlayer.SetCustomProperties(props);
 
         if (_config.matchType == "private" && !string.IsNullOrEmpty(_config.roomCode))
-            JoinOrCreatePrivateRoom();
+        {
+            if (_config.isRoomCreator)
+                CreatePrivateRoom();
+            else
+                JoinPrivateRoom();
+        }
         else
+        {
             JoinPublicRoom();
+        }
     }
 
     public override void OnDisconnected(DisconnectCause cause)
@@ -293,10 +312,31 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         PhotonNetwork.JoinRandomRoom();
     }
 
-    private void JoinOrCreatePrivateRoom()
+    private void CreatePrivateRoom()
     {
         RoomOptions opts = BuildRoomOptions(visible: false);
-        PhotonNetwork.JoinOrCreateRoom(_config.roomCode, opts, TypedLobby.Default);
+        PhotonNetwork.CreateRoom(_config.roomCode, opts, TypedLobby.Default);
+        SetStatus($"Creating room {_config.roomCode}...");
+    }
+
+    private void JoinPrivateRoom()
+    {
+        PhotonNetwork.JoinRoom(_config.roomCode);
+        SetStatus($"Joining room {_config.roomCode}...");
+    }
+
+    public override void OnCreateRoomFailed(short returnCode, string message)
+    {
+        Debug.LogWarning($"[Network] Create room failed: {message}");
+        SetStatus("Room already exists — try a different code.");
+        notificationManager?.ShowWarningMessage("Room already exists. Ask the host for the correct code.");
+    }
+
+    public override void OnJoinRoomFailed(short returnCode, string message)
+    {
+        Debug.LogWarning($"[Network] Join room failed: {message}");
+        SetStatus("Room not found — check the code and try again.");
+        notificationManager?.ShowWarningMessage("Room not found. Check the code and try again.");
     }
 
     public override void OnJoinRandomFailed(short returnCode, string message)
@@ -856,6 +896,12 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         AudioManager.Instance.PlaySFX("Intro_1");
 
+        // Daily task — count what kind of match was started
+        DailyTaskManager.Instance?.IncrementTask(TaskType.PlayMatches);
+        if      (_config?.matchType == "private")    DailyTaskManager.Instance?.IncrementTask(TaskType.PlayCustomMatch);
+        else if (_config?.matchType == "solo")        DailyTaskManager.Instance?.IncrementTask(TaskType.PlaySoloMatch);
+        else if (_config?.gameMode  == "freeforall")  DailyTaskManager.Instance?.IncrementTask(TaskType.PlayTournament);
+
         Debug.Log($"[Network] Team mode result: {teamMode}");
 
         if (PhotonNetwork.IsMasterClient)
@@ -1073,6 +1119,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), suit);
         cardManager?.HideUpcard();
 
+        if (pickerSeat == _localSeat)
+            DailyTaskManager.Instance?.IncrementTask(TaskType.OrderTrump);
+
         SetState(GameState.Playing);
         SetStatus("Trump selected — game begins!");
 
@@ -1152,6 +1201,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), _trump);
         cardManager?.HideUpcard();
 
+        if (pickerSeat == _localSeat)
+            DailyTaskManager.Instance?.IncrementTask(TaskType.OrderTrump);
+
         SetState(GameState.Playing);
         SetStatus("Trump chosen — game begins!");
 
@@ -1181,6 +1233,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         _skipSeat = partnerSeat;
         playFabManager.SetGoAlone(RemapSeatToPanel(goAloneSeat));
+
+        if (goAloneSeat == _localSeat)
+            DailyTaskManager.Instance?.IncrementTask(TaskType.GoAlone);
 
         Debug.Log($"[Network] Go alone: seat {goAloneSeat}, skip seat {partnerSeat}");
     }
@@ -1365,6 +1420,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (!_seatTricks.ContainsKey(winnerSeat)) _seatTricks[winnerSeat] = 0;
         _seatTricks[winnerSeat]++;
 
+        if (winnerSeat == _localSeat)
+            DailyTaskManager.Instance?.IncrementTask(TaskType.WinTricks);
+
         _played.Clear();
         _trickOrder.Clear();
 
@@ -1498,6 +1556,12 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _team1Score += pts1;
         _team2Score += pts2;
 
+        // Daily task — march win (local team swept all 5 tricks)
+        bool localTeamMarch = (_localSeat % 2 == 0 && _team1Tricks == 5)
+                           || (_localSeat % 2 == 1 && _team2Tricks == 5);
+        if (localTeamMarch)
+            DailyTaskManager.Instance?.IncrementTask(TaskType.MarchWin);
+
         // Build hand result summary for game over panel
         string handSummary = BuildHandSummary(pts1, pts2, wentAlone, team1Called);
 
@@ -1612,6 +1676,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         Debug.Log($"[Network] Match over — Local player {(localWon ? "WON" : "LOST")}");
         Debug.Log($"[Network] Final Score — Team 1: {_team1Score} | Team 2: {_team2Score}");
         Debug.Log($"[Network] Trophy change: {(trophyChange > 0 ? "+" : "")}{trophyChange}");
+
+        if (localWon)
+            DailyTaskManager.Instance?.IncrementTask(TaskType.WinMatches);
 
         // ── Economy ────────────────────────────────────────────────
         if (localWon)

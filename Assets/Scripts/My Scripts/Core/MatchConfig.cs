@@ -11,7 +11,8 @@ public class MatchConfig
     // ─── Match Setup ──────────────────────────────────────────────
     public string matchType   = "public";   // "public" | "private" | "solo"
     public string gameMode    = "standard"; // "standard" | "freeforall"
-    public string roomCode    = "";
+    public string roomCode      = "";
+    public bool   isRoomCreator = false;  // true = create room, false = join by code
     public int    betAmount   = 100;
     public int    totalPot    = 400;
     public bool   allowBots   = true;
