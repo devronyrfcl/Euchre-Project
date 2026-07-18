@@ -663,6 +663,7 @@ GameObject:
   - component: {fileID: 1077792307194726891}
   - component: {fileID: 3482338799610328845}
   - component: {fileID: 303151940591706281}
+  - component: {fileID: 3171190476605087295}
   m_Layer: 5
   m_Name: My Card of Tournament Leaderboard
   m_TagString: Untagged
@@ -731,3 +732,20 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &3171190476605087295
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8915447188356081026}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab5ba3fdc39458b4f9f942cad291f2cc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TournamentLeaderboardCard
+  rankText: {fileID: 6567011250559314062}
+  avatarImage: {fileID: 3739336269439577973}
+  defaultAvatar: {fileID: 21300000, guid: d52208894de46ac43a8c1fa0bf43a754, type: 3}
+  nameText: {fileID: 3843616547647216431}
+  scoreText: {fileID: 8646090891526112562}

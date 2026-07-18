@@ -120,6 +120,14 @@ public class GameplayPlayerData : MonoBehaviour
         }
     }
 
+    /// <summary>Assigns a local sprite directly — used for bots (no network fetch).</summary>
+    public void SetAvatarSprite(Sprite sprite)
+    {
+        _pendingAvatarUrl = null;
+        if (avatarImage != null)
+            avatarImage.sprite = sprite != null ? sprite : defaultAvatar;
+    }
+
     // ─────────────────────────────────────────────────────────────
     //  PC Balance
     // ─────────────────────────────────────────────────────────────

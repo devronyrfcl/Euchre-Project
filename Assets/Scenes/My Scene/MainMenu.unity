@@ -3310,7 +3310,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &52344486
 RectTransform:
   m_ObjectHideFlags: 0
@@ -7858,9 +7858,9 @@ RectTransform:
   m_Father: {fileID: 1275446808}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_SizeDelta: {x: -17, y: -17}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &130491357
 MonoBehaviour:
@@ -11021,9 +11021,9 @@ RectTransform:
   m_Father: {fileID: 1275446808}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
-  m_AnchorMax: {x: 1, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 20, y: 0}
+  m_SizeDelta: {x: 20, y: -17}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &175899230
 MonoBehaviour:
@@ -17465,7 +17465,7 @@ RectTransform:
   m_Father: {fileID: 619239661}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -18298,7 +18298,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &282708736
 RectTransform:
   m_ObjectHideFlags: 0
@@ -24179,9 +24179,9 @@ RectTransform:
   m_Father: {fileID: 1275446808}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 20}
+  m_SizeDelta: {x: -17, y: 20}
   m_Pivot: {x: 0, y: 0}
 --- !u!114 &384543834
 MonoBehaviour:
@@ -26129,7 +26129,7 @@ RectTransform:
   m_Father: {fileID: 1171362108}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0.9999999, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -35164,17 +35164,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 26e2d341ee7cf7c488e69ed7626756d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TournamentPanelManager
-  pvCache: {fileID: 0}
-  joinButton: {fileID: 0}
-  playButton: {fileID: 0}
-  entryFeeText: {fileID: 0}
-  matchesLeftText: {fileID: 0}
-  matchmakingText: {fileID: 0}
-  leaderboardContent: {fileID: 0}
-  myCardPrefab: {fileID: 0}
-  otherCardPrefab: {fileID: 0}
-  _isMatchmaking: 0
-  _currentPlayerCount: 1
 --- !u!1 &574779535
 GameObject:
   m_ObjectHideFlags: 0
@@ -35735,7 +35724,7 @@ RectTransform:
   m_Father: {fileID: 415851542}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -58145,7 +58134,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 769999312}
-  - component: {fileID: 769999311}
+  - component: {fileID: 769999313}
   m_Layer: 0
   m_Name: TournamentManager
   m_TagString: Untagged
@@ -58153,30 +58142,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &769999311
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 769999310}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5729c75bc0175584493e44ec0997c0cd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TournamentManager
-  <State>k__BackingField:
-    joined: 0
-    boardId: 
-    matchesPlayed: 0
-    totalScore: 0
-    joinedAtTicks: 
-  <CurrentMatchScore>k__BackingField:
-    localTricksWon: 0
-    wonMatch: 0
-    marchBonus: 0
-    wentAloneAndWon: 0
-  _localWentAloneThisHand: 0
 --- !u!4 &769999312
 Transform:
   m_ObjectHideFlags: 0
@@ -58192,6 +58157,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &769999313
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 769999310}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a296be2a0e2b014a9ce3f59caaea2c1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TournamentManager
 --- !u!1 &770018906
 GameObject:
   m_ObjectHideFlags: 0
@@ -58825,7 +58802,7 @@ RectTransform:
   m_Father: {fileID: 1225614296}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -74839,7 +74816,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &898767041
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -92199,17 +92176,17 @@ MonoBehaviour:
   onClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 572366388}
-        m_TargetAssemblyTypeName: PlayFabManager, Assembly-CSharp
-        m_MethodName: CloseLeaderboard
-        m_Mode: 1
+      - m_Target: {fileID: 1105812509}
+        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
+        m_MethodName: SetActive
+        m_Mode: 6
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
           m_StringArgument: 
-          m_BoolArgument: 1
+          m_BoolArgument: 0
         m_CallState: 2
 --- !u!1 &1085045756
 GameObject:
@@ -92979,13 +92956,15 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1105812510}
+  - component: {fileID: 1105812512}
+  - component: {fileID: 1105812511}
   m_Layer: 5
   m_Name: Tournament Panel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1105812510
 RectTransform:
   m_ObjectHideFlags: 0
@@ -93013,6 +92992,43 @@ RectTransform:
   m_AnchoredPosition: {x: 0.08799744, y: 1.3081207}
   m_SizeDelta: {x: 770.666, y: 345.37625}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1105812511
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1105812509}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9f9e852e1bee4c4eb9fac8958474b83, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TournamentMatchmaking
+  playFabManager: {fileID: 572366388}
+  matchmakingText: {fileID: 1547630008}
+--- !u!114 &1105812512
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1105812509}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d05ea72898bcfd4c984fdf262fe6bc7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TournamentPanelUI
+  playFabManager: {fileID: 572366388}
+  matchmaking: {fileID: 1105812511}
+  joinButton: {fileID: 267347789}
+  playButton: {fileID: 1995751465}
+  entryFeeText: {fileID: 1795680774}
+  prizePoolText: {fileID: 967149730}
+  countdownText: {fileID: 216023668}
+  myAvatarImage: {fileID: 1124749169}
+  defaultAvatar: {fileID: 21300000, guid: d52208894de46ac43a8c1fa0bf43a754, type: 3}
+  myNameText: {fileID: 1853575573}
+  myRankText: {fileID: 103209212}
 --- !u!1 &1106253429
 GameObject:
   m_ObjectHideFlags: 0
@@ -98838,7 +98854,19 @@ MonoBehaviour:
       m_Calls: []
   onClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1105812509}
+        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
+        m_MethodName: SetActive
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 1
+        m_CallState: 2
 --- !u!1 &1199864907
 GameObject:
   m_ObjectHideFlags: 0
@@ -104306,6 +104334,7 @@ GameObject:
   - component: {fileID: 1275446811}
   - component: {fileID: 1275446810}
   - component: {fileID: 1275446809}
+  - component: {fileID: 1275446812}
   m_Layer: 5
   m_Name: Scroll View
   m_TagString: Untagged
@@ -104348,7 +104377,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ScrollRect
   m_Content: {fileID: 1322662772}
-  m_Horizontal: 1
+  m_Horizontal: 0
   m_Vertical: 1
   m_MovementType: 1
   m_Elasticity: 0.1
@@ -104403,6 +104432,21 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1275446807}
   m_CullTransparentMesh: 1
+--- !u!114 &1275446812
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1275446807}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6e23241488d7a84fa66cf5b68de3af8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TournamentLeaderboardUI
+  content: {fileID: 1322662772}
+  meCardPrefab: {fileID: 8915447188356081026, guid: 8922f25a073083e499bf8b90e3e9c8c3, type: 3}
+  otherCardPrefab: {fileID: 3024846544107983623, guid: d63b5b6cc0033a541912ba57af45d2a4, type: 3}
 --- !u!1 &1276139555
 GameObject:
   m_ObjectHideFlags: 0
@@ -142985,7 +143029,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1667170543
 RectTransform:
   m_ObjectHideFlags: 0
@@ -153083,7 +153127,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1741412455
 RectTransform:
   m_ObjectHideFlags: 0

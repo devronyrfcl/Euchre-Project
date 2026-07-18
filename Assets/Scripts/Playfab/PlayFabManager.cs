@@ -650,6 +650,9 @@ public class PlayFabManager : MonoBehaviour
     //  Fetch Virtual Currencies
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>Re-pulls PC/GP balances from PlayFab and updates the cached values + UI texts.</summary>
+    public void RefreshCurrencies() => FetchCurrencies();
+
     private void FetchCurrencies()
     {
         PlayFabClientAPI.GetUserInventory(

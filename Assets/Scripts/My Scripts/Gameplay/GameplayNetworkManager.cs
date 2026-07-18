@@ -83,6 +83,14 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject    spreadFallParticle;
     [SerializeField] private GameObject    mainMenuButtonObj;
 
+    [Header("=== TOURNAMENT GAME OVER ===")]
+    [SerializeField] private GameObject           tournamentGameOverPanel;
+    [SerializeField] private TournamentGameOverUI tournamentGameOverUI;
+
+    [Header("=== BOTS ===")]
+    [Tooltip("Pool of named bots with profile pictures. Add as many as you like — a random, non-repeating set is picked each time bots are needed.")]
+    [SerializeField] private BotProfile[] botProfiles;
+
     // ─────────────────────────────────────────────────────────────
     //  Photon Property Keys
     // ─────────────────────────────────────────────────────────────
@@ -146,6 +154,10 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private Dictionary<int, int> _seatTricks = new Dictionary<int, int>();
     private const int   WIN_SCORE       = 10;
 
+    // Tournament scoring (only populated when _config.matchType == "tournament")
+    private List<ScoreBreakdownEntry> _tournamentBreakdown = new List<ScoreBreakdownEntry>();
+    private bool IsTournament => _config != null && _config.matchType == "tournament";
+
     // Cached positions for game-over return animation
     private Vector2 _p1InitPos, _p2InitPos, _p3InitPos, _p4InitPos;
     private Vector2 _vsInitPos;
@@ -163,8 +175,6 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     // Bots
     private List<int>   _botSeats       = new List<int>();
     private Coroutine   _botFillRoutine;
-
-    private static readonly string[] BOT_NAMES = { "Jusef", "Opu", "Monir" };
 
     private static readonly string[] CARD_TYPES = { "9","T","J","Q","K","A" };
     private static readonly string[] CARD_SUITS = { "C","D","H","S" };
@@ -234,6 +244,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             Button btn = mainMenuButtonObj.GetComponent<Button>();
             if (btn != null) btn.onClick.AddListener(OnMainMenu);
         }
+        if (tournamentGameOverPanel != null) tournamentGameOverPanel.SetActive(false);
+        _tournamentBreakdown.Clear();
 
         // Slot 0 = me — fill instantly from config, no need to wait for Photon
         if (loadingNameTexts.Length > 0 && loadingNameTexts[0] != null)
@@ -251,8 +263,20 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
                 loadingGPTexts[i].text = "0 PC";
         }
 
-        SetStatus("Connecting...");
-        PhotonNetwork.ConnectUsingSettings();
+        // Tournament matches are already connected & in a Photon room by the time this
+        // scene loads (TournamentMatchmaking handled it in the main menu) — reuse the
+        // existing room-ready flow instead of connecting/joining again.
+        if (_config.matchType == "tournament" && PhotonNetwork.InRoom)
+        {
+            SetStatus("Starting tournament match...");
+            if (PhotonNetwork.IsMasterClient) OnCreatedRoom();
+            else                              OnJoinedRoom();
+        }
+        else
+        {
+            SetStatus("Connecting...");
+            PhotonNetwork.ConnectUsingSettings();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -567,6 +591,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             // Slot relative to local player — never overwrites slot 0 (me)
             int loadingSlot = RemapSeatToPanel(seat);
             UpdateLoadingPanelSlot(loadingSlot, displayName, pokerChips);
+            SetLoadingAvatarSprite(loadingSlot, ResolveBotAvatarSprite(avatarUrl));
         }
         else
         {
@@ -584,7 +609,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             playFabManager?.SetupOtherPlayer(
                 panelIdx, playFabId, displayName, pokerChips, avatarUrl, isBot);
 
-            if (!isBot)
+            if (isBot)
+                playFabManager?.GetPlayerPanel(panelIdx)?.SetAvatarSprite(ResolveBotAvatarSprite(avatarUrl));
+            else
                 RefreshOtherPlayerPanel(panelIdx, playFabId, displayName, pokerChips);
         }
 
@@ -740,22 +767,36 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     private void FillRemainingWithBots()
     {
-        int botIdx = 0;
+        List<int> pool = ShuffledBotProfileIndices();
+        int poolCursor = 0;
+
         for (int seat = 1; seat <= 3; seat++)
         {
             if (_takenSeats.Contains(seat) || _botSeats.Contains(seat)) continue;
 
-            string botName = botIdx < BOT_NAMES.Length ? BOT_NAMES[botIdx] : $"Bot {botIdx + 1}";
-            int    botPC   = UnityEngine.Random.Range(2000, 8001);
-            string botId   = $"BOT_SEAT_{seat}";
-            botIdx++;
+            string botName;
+            string avatarUrl = "";
+
+            if (poolCursor < pool.Count)
+            {
+                int profileIdx = pool[poolCursor++];
+                botName   = botProfiles[profileIdx].name;
+                avatarUrl = $"bot:{profileIdx}";
+            }
+            else
+            {
+                botName = $"Bot {seat}";
+            }
+
+            int    botPC = UnityEngine.Random.Range(2000, 8001);
+            string botId = $"BOT_SEAT_{seat}";
 
             _botSeats.Add(seat);
             _seatToName[seat] = botName;
 
             photonView.RPC(nameof(RPC_SeatConfirmed), RpcTarget.All,
                 -(seat + 100),  // negative actor number = bot marker
-                seat, botId, botName, "", botPC, true);
+                seat, botId, botName, avatarUrl, botPC, true);
         }
 
         if (_takenSeats.Count + _botSeats.Count >= 4)
@@ -768,16 +809,43 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         object seatObj;
         if (!leftPlayer.CustomProperties.TryGetValue(PROP_SEAT, out seatObj)) return;
 
-        int seat    = (int)seatObj;
-        string name = $"Bot {seat}";
-        int    pc   = UnityEngine.Random.Range(2000, 8001);
+        int seat = (int)seatObj;
+        int pc   = UnityEngine.Random.Range(2000, 8001);
+
+        string name      = $"Bot {seat}";
+        string avatarUrl = "";
+
+        if (botProfiles != null && botProfiles.Length > 0)
+        {
+            int profileIdx = UnityEngine.Random.Range(0, botProfiles.Length);
+            name      = botProfiles[profileIdx].name;
+            avatarUrl = $"bot:{profileIdx}";
+        }
 
         if (!_botSeats.Contains(seat)) _botSeats.Add(seat);
         _takenSeats.Remove(seat);
         _seatToName[seat] = name;
 
         photonView.RPC(nameof(RPC_SeatConfirmed), RpcTarget.All,
-            -(seat + 100), seat, $"BOT_SEAT_{seat}", name, "", pc, true);
+            -(seat + 100), seat, $"BOT_SEAT_{seat}", name, avatarUrl, pc, true);
+    }
+
+    /// <summary>Returns a shuffled list of botProfiles indices — picking from the front
+    /// gives non-repeating bots for as many seats as the pool can cover.</summary>
+    private List<int> ShuffledBotProfileIndices()
+    {
+        List<int> indices = new List<int>();
+        if (botProfiles == null) return indices;
+
+        for (int i = 0; i < botProfiles.Length; i++) indices.Add(i);
+
+        for (int i = indices.Count - 1; i > 0; i--)
+        {
+            int j = UnityEngine.Random.Range(0, i + 1);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
+        }
+
+        return indices;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -1421,7 +1489,10 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _seatTricks[winnerSeat]++;
 
         if (winnerSeat == _localSeat)
+        {
             DailyTaskManager.Instance?.IncrementTask(TaskType.WinTricks);
+            AddTournamentScore("Trick Won", 10);
+        }
 
         _played.Clear();
         _trickOrder.Clear();
@@ -1562,6 +1633,16 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (localTeamMarch)
             DailyTaskManager.Instance?.IncrementTask(TaskType.MarchWin);
 
+        // Tournament scoring — march / go-alone bonuses for the local team's hand result
+        bool localTeamCalledTrump = team1Called == (_localSeat % 2 == 0);
+        bool localTeamWentAloneAndWon = wentAlone && localTeamCalledTrump &&
+            ((_localSeat % 2 == 0 && _team1Tricks == 5) || (_localSeat % 2 == 1 && _team2Tricks == 5));
+
+        if (localTeamWentAloneAndWon)
+            AddTournamentScore("Went Alone Bonus", 30);
+        else if (localTeamMarch)
+            AddTournamentScore("March Bonus", 20);
+
         // Build hand result summary for game over panel
         string handSummary = BuildHandSummary(pts1, pts2, wentAlone, team1Called);
 
@@ -1680,6 +1761,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (localWon)
             DailyTaskManager.Instance?.IncrementTask(TaskType.WinMatches);
 
+        if (localWon)
+            AddTournamentScore("Match Win Bonus", 50);
+
         // ── Economy ────────────────────────────────────────────────
         if (localWon)
             playFabManager?.DistributeWinnings();
@@ -1711,9 +1795,10 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             onMainMenu:   OnMainMenu);
         */
 
-        ShowMatchOverOnLoadingPanel(winnerTeam);
-
-        
+        if (IsTournament)
+            ShowTournamentGameOverPanel();
+        else
+            ShowMatchOverOnLoadingPanel(winnerTeam);
     }
 
     private void OnRematch()
@@ -1727,6 +1812,76 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         PhotonNetwork.LeaveRoom();
         UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  TOURNAMENT SCORING
+    // ─────────────────────────────────────────────────────────────
+
+    private void AddTournamentScore(string title, int value)
+    {
+        if (!IsTournament || value == 0) return;
+        _tournamentBreakdown.Add(new ScoreBreakdownEntry(title, value));
+    }
+
+    private int SumTournamentBreakdown()
+    {
+        int sum = 0;
+        foreach (ScoreBreakdownEntry entry in _tournamentBreakdown) sum += entry.value;
+        return sum;
+    }
+
+    /// <summary>Client-side rank estimate shown on the tournament game-over panel,
+    /// before the score is actually submitted to PlayFab.</summary>
+    private int ComputeOptimisticRank(int myNewTotal)
+    {
+        TournamentBoardData board = TournamentManager.Instance?.Board;
+        string myId = TournamentManager.Instance?.MyEntry?.playFabId;
+        if (board?.players == null || string.IsNullOrEmpty(myId)) return 0;
+
+        int rank = 1;
+        foreach (TournamentPlayerEntry p in board.players)
+        {
+            if (p.playFabId == myId) continue;
+            if (p.score > myNewTotal) rank++;
+        }
+        return rank;
+    }
+
+    private void ShowTournamentGameOverPanel()
+    {
+        if (allPlayerUICards != null) allPlayerUICards.SetActive(false);
+        if (tournamentGameOverPanel != null) tournamentGameOverPanel.SetActive(true);
+
+        int previousTotal = TournamentManager.Instance?.MyEntry?.score ?? 0;
+        int matchScoreSum = SumTournamentBreakdown();
+        int newRank = ComputeOptimisticRank(previousTotal + matchScoreSum);
+
+        tournamentGameOverUI?.Populate(_tournamentBreakdown, previousTotal, newRank);
+    }
+
+    /// <summary>Wire to the tournament game-over panel's "Continue" / "Main Menu" button.
+    /// Pushes the accumulated match score to PlayFab, then returns to the main menu.</summary>
+    public void GoToMainMenuFromTournament()
+    {
+        int matchScoreSum = SumTournamentBreakdown();
+
+        if (TournamentManager.Instance == null)
+        {
+            PhotonNetwork.LeaveRoom();
+            UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+            return;
+        }
+
+        TournamentManager.Instance.SubmitMatchScore(matchScoreSum, result =>
+        {
+            if (result == null || !result.success)
+                Debug.LogWarning("[Network] Tournament score submission failed — continuing to menu anyway.");
+
+            _tournamentBreakdown.Clear();
+            PhotonNetwork.LeaveRoom();
+            UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -1973,6 +2128,27 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             loadingGPTexts[seat].text = pokerChips.ToString("N0") + " PC";
     }
 
+    /// <summary>Bots encode their avatar as "bot:{profileIndex}" instead of a real URL —
+    /// this resolves that index to a local Sprite from botProfiles (no network fetch).</summary>
+    private Sprite ResolveBotAvatarSprite(string avatarUrl)
+    {
+        if (string.IsNullOrEmpty(avatarUrl) || !avatarUrl.StartsWith("bot:")) return null;
+        if (botProfiles == null) return null;
+
+        if (int.TryParse(avatarUrl.Substring(4), out int idx) && idx >= 0 && idx < botProfiles.Length)
+            return botProfiles[idx].avatar;
+
+        return null;
+    }
+
+    private void SetLoadingAvatarSprite(int seat, Sprite sprite)
+    {
+        if (sprite == null) return;
+        if (seat < 0 || seat >= loadingAvatarImages.Length) return;
+        if (loadingAvatarImages[seat] != null)
+            loadingAvatarImages[seat].sprite = sprite;
+    }
+
     private IEnumerator FetchLoadingAvatar(int seat, string url)
     {
         if (seat < 0 || seat >= loadingAvatarImages.Length) yield break;
@@ -2020,6 +2196,13 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     {
         yield return new WaitForSeconds(delay);
         action?.Invoke();
+    }
+
+    //Exit To Main Menu
+    public void ExitToMainMenu()
+    {
+        PhotonNetwork.LeaveRoom();
+        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
     }
 
     // ─────────────────────────────────────────────────────────────

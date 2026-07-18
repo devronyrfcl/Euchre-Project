@@ -148,6 +148,7 @@ GameObject:
   - component: {fileID: 7839594029467076757}
   - component: {fileID: 1667718048933539319}
   - component: {fileID: 8566016125011580974}
+  - component: {fileID: 2878750665208594223}
   m_Layer: 5
   m_Name: PlayerScoreBrakedownCard
   m_TagString: Untagged
@@ -214,6 +215,20 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &2878750665208594223
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4021610165414444285}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 647db98649236e940bd67839c83397a8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerScoreBreakdownCard
+  titleText: {fileID: 2548073582438465691}
+  valueText: {fileID: 8638324533219945466}
 --- !u!1 &6873680890950072596
 GameObject:
   m_ObjectHideFlags: 0

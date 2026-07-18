@@ -9,7 +9,7 @@ using System.Collections.Generic;
 public class MatchConfig
 {
     // ─── Match Setup ──────────────────────────────────────────────
-    public string matchType   = "public";   // "public" | "private" | "solo"
+    public string matchType   = "public";   // "public" | "private" | "solo" | "tournament"
     public string gameMode    = "standard"; // "standard" | "freeforall"
     public string roomCode      = "";
     public bool   isRoomCreator = false;  // true = create room, false = join by code
@@ -17,6 +17,9 @@ public class MatchConfig
     public int    totalPot    = 400;
     public bool   allowBots   = true;
     public float  botFillDelay = 5f;
+
+    // ─── Tournament ───────────────────────────────────────────────
+    public string tournamentBoardId = "";  // set when matchType == "tournament"
 
     // ─── Local Player ─────────────────────────────────────────────
     public MatchPlayerData localPlayer = new MatchPlayerData();
