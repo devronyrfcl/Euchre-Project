@@ -9,6 +9,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7613893496885722856}
+  - component: {fileID: 2633697223852743558}
+  - component: {fileID: 8646090891526112562}
+  m_Layer: 5
+  m_Name: Points Text (TMP) (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
