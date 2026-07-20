@@ -38,6 +38,10 @@ public class EuchreCardManager : MonoBehaviour
     [SerializeField] private List<Sprite> cardSprites = new List<Sprite>();
     [SerializeField] private Sprite       cardBackSprite;
 
+    [Header("=== DEALER PICKUP ===")]
+    [Tooltip("Where the picked-up upcard visually lands as a 6th hand card, before the dealer discards. Position it just above/beside the hand fan.")]
+    [SerializeField] private RectTransform dealerPickupSlot;
+
     
 
     [Header("=== Error Panel ===")]
@@ -154,6 +158,9 @@ public class EuchreCardManager : MonoBehaviour
     private Dictionary<char, char> _currentAltSuits;
     private bool         _selectionEnabled = false;
 
+    // Dealer discard state — single tap discards immediately, no select+confirm
+    private bool _discardMode = false;
+
     // ─────────────────────────────────────────────────────────────
     //  Unity Lifecycle
     // ─────────────────────────────────────────────────────────────
@@ -188,6 +195,12 @@ public class EuchreCardManager : MonoBehaviour
 
         Debug.Log($"[CardManager] Built sprite map with {_spriteMap.Count} entries.");
     }
+
+    /// <summary>Looks up a card's front-face sprite by code (e.g. "9C", "TD").</summary>
+    public Sprite GetCardSprite(string cardType) =>
+        _spriteMap.TryGetValue(cardType, out Sprite sprite) ? sprite : null;
+
+    public Sprite CardBackSprite => cardBackSprite;
 
     // ─────────────────────────────────────────────────────────────
     //  DEAL ANIMATION
@@ -344,12 +357,33 @@ public class EuchreCardManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  DEALER PICKUP (upcard goes to dealer's hand)
+    //  DEALER PICKUP & DISCARD (Round 1 order-up only)
     // ─────────────────────────────────────────────────────────────
 
-    public void ShowDealerPickup(string cardType)
+    // The picked-up upcard, while it sits as a 6th card awaiting discard.
+    private EuchreCardUI _pickupCardUI;
+
+    /// <summary>Called by GameplayNetworkManager when the local player is the dealer
+    /// and someone ordered up the upcard. Animates it into the hand as a 6th card,
+    /// then lets the dealer tap any of the 6 cards to discard it.</summary>
+    public void BeginDealerDiscard(string upcardCardType)
     {
-        if (_upcardObj == null) return;
+        _discardMode  = true;
+        _pickupCardUI = null;
+
+        foreach (EuchreCardUI card in _handCards)
+            if (card != null) card.SetInteractable(true);
+
+        ShowDealerPickup(upcardCardType);
+    }
+
+    private void ShowDealerPickup(string cardType)
+    {
+        if (_upcardObj == null)
+        {
+            StartCoroutine(AddCardToHand(cardType));
+            return;
+        }
 
         RectTransform rt = _upcardObj.GetComponent<RectTransform>();
         rt.DOAnchorPos(LOCAL_RECEIVE_POS, 0.3f)
@@ -357,17 +391,16 @@ public class EuchreCardManager : MonoBehaviour
             .OnComplete(() =>
             {
                 if (_upcardObj != null) Destroy(_upcardObj);
-                // Add upcard to hand visually
+                _upcardObj = null;
                 StartCoroutine(AddCardToHand(cardType));
             });
     }
 
-    // Adds a card to the local player's hand visually after dealer picks up the upcard
+    // Adds a 6th card to the local player's hand visually — always appends,
+    // never overwrites an existing hand card slot.
     private IEnumerator AddCardToHand(string cardType)
     {
         yield return new WaitForSeconds(0.1f);
-
-        int slot = _handCards.Count < 5 ? _handCards.Count : 4;
 
         GameObject obj = Instantiate(playableCardPrefab, cardHolder);
         RectTransform rt = obj.GetComponent<RectTransform>();
@@ -381,16 +414,62 @@ public class EuchreCardManager : MonoBehaviour
 
         EuchreCardUI cardUI = obj.GetComponent<EuchreCardUI>();
         if (cardUI != null)
-            cardUI.Init(cardType, slot, this);
+        {
+            cardUI.Init(cardType, _handCards.Count, this);
+            cardUI.SetInteractable(_discardMode);
+        }
 
-        if (slot < _handCards.Count)
-            _handCards[slot] = cardUI;
-        else
-            _handCards.Add(cardUI);
+        _handCards.Add(cardUI);
+        _pickupCardUI = cardUI;
 
-        rt.DOAnchorPos(slot < HAND_POSITIONS.Length ? HAND_POSITIONS[slot] : HAND_POSITIONS[4], 0.3f)
-            .SetEase(Ease.OutBack);
+        Vector2 destPos = dealerPickupSlot != null
+            ? dealerPickupSlot.anchoredPosition
+            : HAND_POSITIONS[4] + new Vector2(0f, 60f);
+
+        rt.DOAnchorPos(destPos, 0.3f).SetEase(Ease.OutBack);
         rt.DOScale(Vector3.one, 0.3f).SetEase(Ease.OutBack);
+    }
+
+    /// <summary>Removes the tapped card from hand and reports the discard to the network layer.
+    /// If the dealer discards one of their original 5 cards (keeping the picked-up card),
+    /// the picked-up card slides into the fan slot the discarded card vacated.</summary>
+    private void HandleDiscardTap(EuchreCardUI tappedCard)
+    {
+        if (tappedCard == null) return;
+
+        string cardType            = tappedCard.CardType;
+        bool   keptPickupCard      = tappedCard != _pickupCardUI && _pickupCardUI != null;
+        int    vacatedSlot         = tappedCard.SlotIndex;
+        int    vacatedSiblingIndex = tappedCard.transform.GetSiblingIndex();
+
+        _discardMode = false;
+
+        foreach (EuchreCardUI card in _handCards)
+            if (card != null) card.SetInteractable(false);
+
+        _handCards.Remove(tappedCard);
+        Destroy(tappedCard.gameObject);
+
+        if (keptPickupCard)
+        {
+            EuchreCardUI pickup = _pickupCardUI;
+            int slot = Mathf.Clamp(vacatedSlot, 0, HAND_POSITIONS.Length - 1);
+
+            // Match sibling order too, so overlap/layering under PlayerCardHolder
+            // matches where the discarded card used to sit in the fan.
+            pickup.transform.SetSiblingIndex(vacatedSiblingIndex);
+
+            RectTransform rt = pickup.GetComponent<RectTransform>();
+            rt.DOAnchorPos(HAND_POSITIONS[slot], 0.3f)
+                .SetEase(Ease.OutBack)
+                .OnComplete(() => pickup.RefreshRestState());
+            rt.DOLocalRotate(new Vector3(0f, 0f, HAND_ROTATIONS_Z[slot]), 0.3f)
+                .SetEase(Ease.OutCubic);
+        }
+
+        _pickupCardUI = null;
+
+        GameplayNetworkManager.Instance?.LocalDiscardCard(cardType);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -429,6 +508,12 @@ public class EuchreCardManager : MonoBehaviour
     /// <summary>Called by EuchreCardUI when local player taps a card.</summary>
     public void OnCardTapped(EuchreCardUI tappedCard)
     {
+        if (_discardMode)
+        {
+            HandleDiscardTap(tappedCard);
+            return;
+        }
+
         if (!_selectionEnabled) return;
 
         if (tappedCard.IsSelected)

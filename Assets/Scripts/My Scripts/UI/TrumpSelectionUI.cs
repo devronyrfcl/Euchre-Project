@@ -96,8 +96,10 @@ public class TrumpSelectionUI : MonoBehaviour
     /// Show Phase 1 popup.
     /// upcardSuit: suit char of the upcard.
     /// canPass: false when dealer is forced to pick.
+    /// canOrderUp: false when the player lacks a natural trump card (house rule) —
+    ///             the dealer is always exempt from this requirement.
     /// </summary>
-    public void ShowPhase1(char upcardSuit, bool canPass,
+    public void ShowPhase1(char upcardSuit, bool canPass, bool canOrderUp,
                             Action onOrderUp, Action onPass)
     {
         _onOrderUp    = onOrderUp;
@@ -105,9 +107,11 @@ public class TrumpSelectionUI : MonoBehaviour
         _phase1Active = true;
 
         titleText.text    = "Order Up?";
-        subtitleText.text = canPass
-            ? "Order up this suit as trump, or pass."
-            : "You must order up — dealer's choice.";
+        subtitleText.text = !canOrderUp
+            ? "You need a natural trump card to order this up — pass instead."
+            : canPass
+                ? "Order up this suit as trump, or pass."
+                : "You must order up — dealer's choice.";
 
         // Show upcard suit icon
         upcardDisplay?.SetActive(true);
@@ -118,6 +122,7 @@ public class TrumpSelectionUI : MonoBehaviour
             upcardSuitIcon.sprite = GetSuitSprite(upcardSuit);
 
         orderUpButton?.gameObject.SetActive(true);
+        SetSuitButtonState(orderUpButton, canOrderUp);
 
         if (passButton != null)
             passButton.gameObject.SetActive(canPass);
@@ -135,8 +140,10 @@ public class TrumpSelectionUI : MonoBehaviour
     /// Show Phase 2 popup.
     /// excludedSuit: the upcard's suit — cannot be selected.
     /// canPass: false when this is the dealer (forced pick).
+    /// canCallSuit: per-suit natural-trump check (house rule) — the dealer is always
+    ///              exempt, so pass a predicate that always returns true for the dealer.
     /// </summary>
-    public void ShowPhase2(string excludedSuit, bool canPass,
+    public void ShowPhase2(string excludedSuit, bool canPass, Func<char, bool> canCallSuit,
                             Action<char> onSuitPicked, Action onPass)
     {
         _onSuitPicked  = onSuitPicked;
@@ -158,11 +165,11 @@ public class TrumpSelectionUI : MonoBehaviour
         if (passButton != null)
             passButton.gameObject.SetActive(canPass);
 
-        // Disable excluded suit button
-        SetSuitButtonState(clubsButton,    excludedSuit != "C");
-        SetSuitButtonState(diamondsButton, excludedSuit != "D");
-        SetSuitButtonState(heartsButton,   excludedSuit != "H");
-        SetSuitButtonState(spadesButton,   excludedSuit != "S");
+        // Disable excluded suit button, and any suit the player lacks natural trump for
+        SetSuitButtonState(clubsButton,    excludedSuit != "C" && (canCallSuit?.Invoke('C') ?? true));
+        SetSuitButtonState(diamondsButton, excludedSuit != "D" && (canCallSuit?.Invoke('D') ?? true));
+        SetSuitButtonState(heartsButton,   excludedSuit != "H" && (canCallSuit?.Invoke('H') ?? true));
+        SetSuitButtonState(spadesButton,   excludedSuit != "S" && (canCallSuit?.Invoke('S') ?? true));
 
         ShowPanel();
     }

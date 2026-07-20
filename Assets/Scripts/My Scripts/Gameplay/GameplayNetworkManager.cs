@@ -91,6 +91,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [Tooltip("Pool of named bots with profile pictures. Add as many as you like — a random, non-repeating set is picked each time bots are needed.")]
     [SerializeField] private BotProfile[] botProfiles;
 
+    [Header("=== DEALER SELECTION ===")]
+    [SerializeField] private DealerSelectionUI dealerSelectionUI;
+
     // ─────────────────────────────────────────────────────────────
     //  Photon Property Keys
     // ─────────────────────────────────────────────────────────────
@@ -109,8 +112,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
     public enum GameState
     {
-        Connecting, WaitingForPlayers, TeamVote,
-        Dealing, TrumpPhase1, TrumpPhase2,
+        Connecting, WaitingForPlayers, TeamVote, DealerSelection,
+        Dealing, TrumpPhase1, TrumpPhase2, DealerDiscard,
         Playing, ScoringTrick, HandOver, MatchOver
     }
 
@@ -168,6 +171,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     private readonly HashSet<int> _botBusySeats = new HashSet<int>();
     private List<string>                  _played  = new List<string>();
     private List<string>                  _deck    = new List<string>();
+    // Every card played so far this hand — rejects a duplicate RPC_CardPlayed
+    // for a card that's already down (defensive, doesn't require hand visibility).
+    private readonly HashSet<string> _cardsPlayedThisHand = new HashSet<string>();
 
     // Trick turn order (built at start of each trick)
     private List<int>   _trickOrder     = new List<int>();
@@ -985,8 +991,54 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _team1Score = 0;
         _team2Score = 0;
         photonView.RPC(nameof(RPC_ResetMatchTotals), RpcTarget.All);
-        int firstDealer = UnityEngine.Random.Range(0, 4);
+        StartCoroutine(RunDealerSelectionThenStartHand());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  DEALER SELECTION — deal face-up round robin until Jack of Clubs
+    // ─────────────────────────────────────────────────────────────
+
+    private IEnumerator RunDealerSelectionThenStartHand()
+    {
+        List<string> tempDeck = new List<string>();
+        foreach (string type in CARD_TYPES)
+            foreach (string suit in CARD_SUITS)
+                tempDeck.Add(type + suit);
+
+        for (int i = tempDeck.Count - 1; i > 0; i--)
+        {
+            int j = UnityEngine.Random.Range(0, i + 1);
+            (tempDeck[i], tempDeck[j]) = (tempDeck[j], tempDeck[i]);
+        }
+
+        List<string> revealSequence = new List<string>();
+        int seat        = 0;
+        int firstDealer = 0;
+
+        foreach (string card in tempDeck)
+        {
+            revealSequence.Add(card);
+            if (card == "JC") { firstDealer = seat; break; }
+            seat = (seat + 1) % 4;
+        }
+
+        string sequenceCsv = string.Join(",", revealSequence);
+        photonView.RPC(nameof(RPC_DealerSelectionReveal), RpcTarget.All, sequenceCsv, firstDealer);
+
+        // Let the reveal animation finish playing before the first hand deals
+        yield return new WaitForSeconds(revealSequence.Count * 0.85f + 1.5f);
+
         photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, firstDealer);
+    }
+
+    [PunRPC]
+    private void RPC_DealerSelectionReveal(string sequenceCsv, int firstDealerSeat)
+    {
+        SetState(GameState.DealerSelection);
+        SetStatus("Determining first dealer...");
+
+        List<string> sequence = new List<string>(sequenceCsv.Split(','));
+        dealerSelectionUI?.PlayReveal(sequence, firstDealerSeat);
     }
 
     [PunRPC]
@@ -1017,6 +1069,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _played.Clear();
         _hands.Clear();
         _deck.Clear();
+        _cardsPlayedThisHand.Clear();
 
         SetState(GameState.Dealing);
         SetStatus("Dealing cards...");
@@ -1051,18 +1104,31 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             _deck[j]   = tmp;
         }
 
-        // Deal 5 cards per seat
+        // Traditional dealing pattern: first pass 3-2-3-2, second pass 2-3-2-3,
+        // starting from the seat left of the dealer. Every seat still ends up
+        // with exactly 5 cards — this only changes the order cards are handed out.
         for (int seat = 0; seat < 4; seat++)
-        {
             _hands[seat] = new List<string>();
-            for (int c = 0; c < 5; c++)
+
+        int[][] passCounts = { new[] { 3, 2, 3, 2 }, new[] { 2, 3, 2, 3 } };
+        int startSeat = (_dealerSeat + 1) % 4;
+        int deckCursor = 0;
+
+        foreach (int[] counts in passCounts)
+        {
+            for (int i = 0; i < 4; i++)
             {
-                _hands[seat].Add(_deck[0]);
-                _deck.RemoveAt(0);
+                int seat  = (startSeat + i) % 4;
+                int count = counts[i];
+                for (int c = 0; c < count; c++)
+                {
+                    _hands[seat].Add(_deck[deckCursor]);
+                    deckCursor++;
+                }
             }
         }
 
-        string upcard = _deck[0]; // top of remaining deck
+        string upcard = _deck[deckCursor]; // next card after all 20 dealt
 
         // Send each human player their hand
         foreach (Player p in PhotonNetwork.PlayerList)
@@ -1132,10 +1198,19 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (!isMyTurn) return;
 
         char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
+        bool canOrderUp = isDealer || HasNaturalTrump(_localSeat, upcardSuit);
 
-        trumpUI?.ShowPhase1(upcardSuit, canPass: !forced,
+        trumpUI?.ShowPhase1(upcardSuit, canPass: !forced, canOrderUp: canOrderUp,
             onOrderUp: () =>
             {
+                // Defensive re-check — the button is disabled when this is false,
+                // so this only fires if something bypassed the UI gate.
+                if (!isDealer && !HasNaturalTrump(_localSeat, upcardSuit))
+                {
+                    photonView.RPC(nameof(RPC_IllegalTrumpCall), RpcTarget.All, _localSeat);
+                    return;
+                }
+
                 // Go-alone prompt is inside TrumpSelectionUI
                 // OnGoAloneNo / OnGoAloneYes call back here
                 photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All,
@@ -1185,11 +1260,75 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         AudioManager.Instance.PlaySFX("TrumpSelected");
         trumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), suit);
-        cardManager?.HideUpcard();
 
         if (pickerSeat == _localSeat)
             DailyTaskManager.Instance?.IncrementTask(TaskType.OrderTrump);
 
+        // Round 1 (order-up) means the dealer must pick up the turned-up card
+        // and discard one — this differs from Round 2, where no card is picked up.
+        string upcard = _deck.Count > 0 ? _deck[0] : "";
+        BeginDealerDiscardPhase(upcard);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  DEALER PICK-UP & DISCARD (Round 1 order-up only)
+    // ─────────────────────────────────────────────────────────────
+
+    private void BeginDealerDiscardPhase(string upcard)
+    {
+        SetState(GameState.DealerDiscard);
+
+        if (_dealerSeat == _localSeat)
+        {
+            // I'm the dealer — add the upcard to my own hand and pick a discard.
+            if (_hands.ContainsKey(_localSeat)) _hands[_localSeat].Add(upcard);
+            SetStatus("Pick a card to discard");
+            cardManager?.BeginDealerDiscard(upcard);
+        }
+        else
+        {
+            cardManager?.HideUpcard();
+            SetStatus($"{SeatName(_dealerSeat)} is picking up...");
+
+            if (_botSeats.Contains(_dealerSeat) && PhotonNetwork.IsMasterClient)
+                StartCoroutine(BotDealerDiscard(_dealerSeat, upcard));
+        }
+    }
+
+    /// <summary>Called by EuchreCardManager once the local dealer taps a card to discard.</summary>
+    public void LocalDiscardCard(string cardType)
+    {
+        if (_hands.ContainsKey(_localSeat))
+            _hands[_localSeat].Remove(cardType);
+
+        photonView.RPC(nameof(RPC_DealerDiscardComplete), RpcTarget.All);
+    }
+
+    private IEnumerator BotDealerDiscard(int dealerSeat, string upcard)
+    {
+        yield return new WaitForSeconds(UnityEngine.Random.Range(1f, 2f));
+
+        if (!_hands.ContainsKey(dealerSeat)) _hands[dealerSeat] = new List<string>();
+        _hands[dealerSeat].Add(upcard);
+
+        // Discard the lowest-value card — trump cards always score higher than
+        // off-suit junk, so this naturally keeps trump and throws away the rest.
+        string worst    = _hands[dealerSeat][0];
+        int    worstVal = int.MaxValue;
+        foreach (string c in _hands[dealerSeat])
+        {
+            int val = EvaluateCard(c, _trump);
+            if (val < worstVal) { worstVal = val; worst = c; }
+        }
+
+        _hands[dealerSeat].Remove(worst);
+
+        photonView.RPC(nameof(RPC_DealerDiscardComplete), RpcTarget.All);
+    }
+
+    [PunRPC]
+    private void RPC_DealerDiscardComplete()
+    {
         SetState(GameState.Playing);
         SetStatus("Trump selected — game begins!");
 
@@ -1243,9 +1382,19 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         if (!isMyTurn) return;
 
-        trumpUI?.ShowPhase2(excludedSuit, canPass: !forced,
+        System.Func<char, bool> canCallSuit = suit => isDealer || HasNaturalTrump(_localSeat, suit);
+
+        trumpUI?.ShowPhase2(excludedSuit, canPass: !forced, canCallSuit: canCallSuit,
             onSuitPicked: (suit) =>
             {
+                // Defensive re-check — the button is disabled when this is false,
+                // so this only fires if something bypassed the UI gate.
+                if (!isDealer && !HasNaturalTrump(_localSeat, suit))
+                {
+                    photonView.RPC(nameof(RPC_IllegalTrumpCall), RpcTarget.All, _localSeat);
+                    return;
+                }
+
                 photonView.RPC(nameof(RPC_TrumpSuitChosen), RpcTarget.All,
                     _localSeat, suit.ToString());
             },
@@ -1374,6 +1523,15 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_CardPlayed(int fromSeat, string cardType)
     {
+        // Defensive — reject a card that's already been played this hand. Every
+        // client can verify this independently since played cards are public
+        // information, unlike the sender's remaining hand.
+        if (!_cardsPlayedThisHand.Add(cardType))
+        {
+            Debug.LogWarning($"[Network] Rejected duplicate card play: {cardType} (already played this hand).");
+            return;
+        }
+
         turnTimer?.StopTimer();
         AudioManager.Instance.PlaySFX("PlayCard");
 
@@ -1597,7 +1755,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             if (wentAlone)
             {
                 // Solo player is on team 1
-                if (_team1Tricks == 5)      pts1 = 4; // all 5 alone = 4 pts
+                if (_team1Tricks == 5)      pts1 = 5; // all 5 alone = 5 pts (house rule)
                 else if (_team1Tricks >= 3) pts1 = 1; // 3 or 4 tricks = 1 pt
                 else                        pts2 = 2; // euchred = 2 pts to opponents
             }
@@ -1612,7 +1770,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         {
             if (wentAlone)
             {
-                if (_team2Tricks == 5)      pts2 = 4;
+                if (_team2Tricks == 5)      pts2 = 5; // all 5 alone = 5 pts (house rule)
                 else if (_team2Tricks >= 3) pts2 = 1;
                 else                        pts1 = 2;
             }
@@ -1681,7 +1839,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         {
             if (pts1 > 0)
             {
-                if (_team1Tricks == 5 && wentAlone) result = "March Alone! +4 pts";
+                if (_team1Tricks == 5 && wentAlone) result = "March Alone! +5 pts";
                 else if (_team1Tricks == 5)         result = "March! +2 pts";
                 else                                result = "Made it! +1 pt";
             }
@@ -1945,7 +2103,9 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _botBusySeats.Remove(seat);
 
         char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
-        bool orderUp    = forced || UnityEngine.Random.value > 0.4f;
+        bool isDealer   = seat == _dealerSeat;
+        bool hasNatural = isDealer || HasNaturalTrump(seat, upcardSuit);
+        bool orderUp    = hasNatural && (forced || UnityEngine.Random.value > 0.4f);
 
         if (orderUp)
             photonView.RPC(nameof(RPC_TrumpOrdered), RpcTarget.All,
@@ -1969,19 +2129,70 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         _botBusySeats.Remove(seat);
 
-        bool pick = forced || UnityEngine.Random.value > 0.4f;
+        bool isDealer = seat == _dealerSeat;
+
+        // Only consider suits the bot legally can call — dealer is exempt.
+        string chosen = null;
+        foreach (string s in new[] { "C", "D", "H", "S" })
+        {
+            if (s == excludedSuit) continue;
+            if (isDealer || HasNaturalTrump(seat, s[0])) { chosen = s; break; }
+        }
+
+        bool pick = chosen != null && (forced || UnityEngine.Random.value > 0.4f);
 
         if (pick)
         {
-            string chosen = "C";
-            foreach (string s in new[] { "C","D","H","S" })
-            { if (s != excludedSuit) { chosen = s; break; } }
             photonView.RPC(nameof(RPC_TrumpSuitChosen), RpcTarget.All, seat, chosen);
         }
         else
         {
             int next = (seat + 1) % 4;
             photonView.RPC(nameof(RPC_TrumpPhase2Turn), RpcTarget.All, next, excludedSuit);
+        }
+    }
+
+    /// <summary>House rule: a natural trump card has a printed suit matching trump —
+    /// this includes the right bower (Jack of that suit) but excludes the left bower
+    /// (whose printed suit is the same color, not trump).</summary>
+    private bool HasNaturalTrump(int seat, char suit)
+    {
+        if (!_hands.ContainsKey(seat)) return false;
+        foreach (string card in _hands[seat])
+            if (card.Length > 1 && card[1] == suit) return true;
+        return false;
+    }
+
+    [PunRPC]
+    private void RPC_IllegalTrumpCall(int callerSeat)
+    {
+        trumpUI?.Hide();
+        playFabManager?.ClearSelectingTrump();
+        turnTimer?.StopTimer();
+
+        int penalizedTeam = callerSeat % 2 == 0 ? 1 : 2;
+        int awardedTeam   = penalizedTeam == 1 ? 2 : 1;
+
+        if (awardedTeam == 1) _team1Score += 4;
+        else                  _team2Score += 4;
+
+        string summary = $"Illegal trump call by {SeatName(callerSeat)} — opponents awarded 4 points.";
+        Debug.LogWarning($"[Network] {summary}");
+        notificationManager?.ShowWarningMessagePulse(summary);
+
+        trickDisplay?.UpdateTrickScore(_team1Tricks, _team2Tricks, _team1Score, _team2Score, _isTeamMode);
+
+        if (_team1Score >= WIN_SCORE || _team2Score >= WIN_SCORE)
+        {
+            EndMatch(summary);
+            return;
+        }
+
+        if (PhotonNetwork.IsMasterClient)
+        {
+            int nextDealer = (_dealerSeat + 1) % 4;
+            StartCoroutine(DelayThen(() =>
+                photonView.RPC(nameof(RPC_StartHand), RpcTarget.All, nextDealer), 2f));
         }
     }
 

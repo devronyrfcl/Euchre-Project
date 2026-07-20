@@ -72,6 +72,11 @@ public class EuchreCardUI : MonoBehaviour
         _restRotation = _rt.localEulerAngles.z;
     }
 
+    /// <summary>Re-caches the rest position/rotation from the card's current transform.
+    /// Call after moving a card to a new resting spot (e.g. the dealer-discard swap)
+    /// so the selection raise animation doesn't jump back to the old spot.</summary>
+    public void RefreshRestState() => CacheRestState();
+
     // ─────────────────────────────────────────────────────────────
     //  Interactability
     // ─────────────────────────────────────────────────────────────

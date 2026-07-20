@@ -67,6 +67,9 @@ MonoBehaviour:
   - RPC_TrumpPhase2Turn
   - RPC_TrumpSuitChosen
   - RPC_ResetMatchTotals
+  - RPC_DealerDiscardComplete
+  - RPC_DealerSelectionReveal
+  - RPC_IllegalTrumpCall
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1
