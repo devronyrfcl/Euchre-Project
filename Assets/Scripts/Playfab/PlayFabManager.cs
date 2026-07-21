@@ -669,9 +669,9 @@ public class PlayFabManager : MonoBehaviour
                 SetTextArray(pcTexts, pc.ToString());
 
                 // ADD THIS
-                NotificationManager.Instance?.AddNotification(
+                /*NotificationManager.Instance?.AddNotification(
                     "Balance Loaded",
-                    $"Your current Poker Chips balance is {pc:N0} PC.");
+                    $"Your current Poker Chips balance is {pc:N0} PC.");*/
             },
             error =>
             {
@@ -1408,7 +1408,7 @@ public class PlayFabManager : MonoBehaviour
         original.LoadImage(imageBytes);
 
         // Scale down to 512×512
-        Texture2D resized = ResizeTexture(original, 128, 128);
+        Texture2D resized = ResizeTexture(original, 512, 512);
         byte[] compressedBytes = resized.EncodeToJPG(75); // 75% quality JPEG
 
         Destroy(original);

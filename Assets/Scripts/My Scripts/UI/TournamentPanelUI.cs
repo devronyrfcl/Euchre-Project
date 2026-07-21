@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -6,8 +7,16 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Main Menu — "Tournament Panel".
-/// Handles Join / Play buttons, entry fee + prize pool display, 48h countdown,
-/// and the local player's own avatar/name/rank reference.
+///
+/// Two top-level states:
+///  - Not joined  → show the Tournament List (browse/join/create rooms)
+///  - Joined      → show the dashboard (Left Side Panels, Total Coin, Scroll View,
+///                   Title Text) with Play/Leave, entry fee, prize pool, countdown,
+///                   and the local player's own avatar/name/rank.
+///
+/// Joining a room is free (handled by TournamentListUI / room cards). The entry
+/// fee is charged the first time Play is pressed. Leave is only available before
+/// paying.
 /// </summary>
 public class TournamentPanelUI : MonoBehaviour
 {
@@ -15,14 +24,23 @@ public class TournamentPanelUI : MonoBehaviour
     [SerializeField] private PlayFabManager        playFabManager;
     [SerializeField] private TournamentMatchmaking matchmaking;
 
+    [Header("=== TOP-LEVEL STATE ===")]
+    [Tooltip("Shown when the player hasn't joined a tournament room yet")]
+    [SerializeField] private GameObject tournamentListPanel;
+    [Tooltip("These 4 are the joined-room dashboard — hidden while browsing the Tournament List")]
+    [SerializeField] private GameObject leftSidePanels;
+    [SerializeField] private GameObject totalCoinObj;
+    [SerializeField] private GameObject scrollViewObj;
+    [SerializeField] private GameObject titleTextObj;
+
     [Header("=== BUTTONS ===")]
-    [SerializeField] private Button joinButton;
     [SerializeField] private Button playButton;
+    [SerializeField] private Button leaveButton;
 
     [Header("=== INFO TEXTS ===")]
     [SerializeField] private TMP_Text entryFeeText;
     [SerializeField] private TMP_Text prizePoolText;
-    [Tooltip("48 hour countdown remaining after joining")]
+    [Tooltip("48 hour countdown — starts when the first player joins the room")]
     [SerializeField] private TMP_Text countdownText;
 
     [Header("=== MY STATUS ===")]
@@ -40,8 +58,8 @@ public class TournamentPanelUI : MonoBehaviour
 
     private void OnEnable()
     {
-        if (joinButton != null) joinButton.onClick.AddListener(OnJoinClicked);
-        if (playButton != null) playButton.onClick.AddListener(OnPlayClicked);
+        if (playButton  != null) playButton.onClick.AddListener(OnPlayClicked);
+        if (leaveButton != null) leaveButton.onClick.AddListener(OnLeaveClicked);
 
         if (TournamentManager.Instance != null)
             TournamentManager.Instance.OnStatusUpdated += UpdateUI;
@@ -58,12 +76,25 @@ public class TournamentPanelUI : MonoBehaviour
 
         TournamentManager.Instance?.RefreshMyStatus(_ => UpdateUI());
         UpdateUI();
+
+        // Did a room I was in expire and auto-pay-out while I was away?
+        TournamentManager.Instance?.CheckPendingReward((hasReward, reward) =>
+        {
+            if (!hasReward || reward == null) return;
+
+            NotificationManager.Instance?.AddNotification(
+                "Tournament Ended!",
+                $"\"{reward.roomName}\" finished — you placed #{reward.rank} and earned {reward.reward:N0} PC!");
+
+            playFabManager?.RefreshCurrencies();
+            TournamentManager.Instance?.ClearPendingReward();
+        });
     }
 
     private void OnDisable()
     {
-        if (joinButton != null) joinButton.onClick.RemoveListener(OnJoinClicked);
-        if (playButton != null) playButton.onClick.RemoveListener(OnPlayClicked);
+        if (playButton  != null) playButton.onClick.RemoveListener(OnPlayClicked);
+        if (leaveButton != null) leaveButton.onClick.RemoveListener(OnLeaveClicked);
 
         if (TournamentManager.Instance != null)
             TournamentManager.Instance.OnStatusUpdated -= UpdateUI;
@@ -82,29 +113,6 @@ public class TournamentPanelUI : MonoBehaviour
     //  Button handlers
     // ─────────────────────────────────────────────────────────────
 
-    private void OnJoinClicked()
-    {
-        if (TournamentManager.Instance == null) return;
-
-        if (joinButton != null) joinButton.interactable = false;
-
-        TournamentManager.Instance.JoinTournament((success, error) =>
-        {
-            if (joinButton != null) joinButton.interactable = true;
-
-            if (success)
-            {
-                playFabManager?.RefreshCurrencies();
-                UpdateUI();
-            }
-            else
-            {
-                NotificationManager.Instance?.AddNotification(
-                    "Couldn't Join Tournament", error ?? "Please try again.");
-            }
-        });
-    }
-
     private void OnPlayClicked()
     {
         if (matchmaking == null)
@@ -113,7 +121,52 @@ public class TournamentPanelUI : MonoBehaviour
             return;
         }
 
-        matchmaking.Play();
+        TournamentManager tm = TournamentManager.Instance;
+        if (tm == null) return;
+
+        if (tm.HasPaid)
+        {
+            matchmaking.Play();
+            return;
+        }
+
+        // First Play press — charge the entry fee before matchmaking starts.
+        if (playButton != null) playButton.interactable = false;
+
+        tm.PayEntryFee((success, error) =>
+        {
+            if (playButton != null) playButton.interactable = true;
+
+            if (!success)
+            {
+                NotificationManager.Instance?.AddNotification("Payment Failed", error ?? "Please try again.");
+                return;
+            }
+
+            playFabManager?.RefreshCurrencies();
+            UpdateUI(); // Leave button hides now that the entry fee is paid
+            matchmaking.Play();
+        });
+    }
+
+    private void OnLeaveClicked()
+    {
+        if (TournamentManager.Instance == null) return;
+
+        if (leaveButton != null) leaveButton.interactable = false;
+
+        TournamentManager.Instance.LeaveRoom((success, error) =>
+        {
+            if (leaveButton != null) leaveButton.interactable = true;
+
+            if (!success)
+            {
+                NotificationManager.Instance?.AddNotification("Couldn't Leave", error ?? "Please try again.");
+                return;
+            }
+
+            UpdateUI(); // switches back to the Tournament List
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -125,18 +178,34 @@ public class TournamentPanelUI : MonoBehaviour
         TournamentManager tm = TournamentManager.Instance;
         bool joined = tm != null && tm.IsJoined;
 
-        if (joinButton != null) joinButton.gameObject.SetActive(!joined);
-        if (playButton != null)
+        // Top-level state switch
+        tournamentListPanel?.SetActive(!joined);
+        leftSidePanels?.SetActive(joined);
+        totalCoinObj?.SetActive(joined);
+        scrollViewObj?.SetActive(joined);
+        titleTextObj?.SetActive(joined);
+
+        if (!joined)
         {
-            playButton.gameObject.SetActive(joined);
-            playButton.interactable = joined && tm.CanPlay;
+            UpdateCountdownText();
+            if (myRankText != null) myRankText.text = "#0";
+            return;
         }
 
+        if (playButton != null)
+        {
+            playButton.gameObject.SetActive(true);
+            playButton.interactable = tm.CanPlay;
+        }
+
+        if (leaveButton != null)
+            leaveButton.gameObject.SetActive(!tm.HasPaid);
+
         if (prizePoolText != null)
-            prizePoolText.text = $"Prize Pool: {(joined && tm.Board != null ? tm.Board.prizePool : 0):N0} PC";
+            prizePoolText.text = $"Prize Pool: {(tm.Board != null ? tm.Board.prizePool : 0):N0} PC";
 
         if (myRankText != null)
-            myRankText.text = joined ? $"#{ComputeMyRank(tm)}" : "#0";
+            myRankText.text = $"#{ComputeMyRank(tm)}";
 
         UpdateCountdownText();
     }
@@ -166,7 +235,7 @@ public class TournamentPanelUI : MonoBehaviour
     {
         if (tm.Board?.players == null || tm.MyEntry == null) return 0;
 
-        var sorted = new System.Collections.Generic.List<TournamentPlayerEntry>(tm.Board.players);
+        var sorted = new List<TournamentPlayerEntry>(tm.Board.players);
         sorted.Sort((a, b) => b.score.CompareTo(a.score));
 
         for (int i = 0; i < sorted.Count; i++)

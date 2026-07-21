@@ -13,16 +13,18 @@ public class TournamentPlayerEntry
     public string avatarUrl   = "";
     public int    score       = 0;
     public int    matchesPlayed = 0;
+    public bool   hasPaid     = false;
     public long   joinedAt    = 0;   // ms since epoch (UTC)
-    public long   deadline    = 0;   // ms since epoch (UTC) — 48h after joinedAt
 }
 
 [Serializable]
 public class TournamentBoardData
 {
-    public string boardId   = "";
-    public int    prizePool = 0;
-    public long   createdAt = 0;
+    public string boardId        = "";
+    public string roomName       = "";
+    public int    prizePool      = 0;
+    public long   createdAt      = 0;
+    public long   timerStartedAt = 0;   // ms since epoch (UTC) — set when the first player joined
     public List<TournamentPlayerEntry> players = new List<TournamentPlayerEntry>();
 }
 
@@ -38,6 +40,15 @@ public struct ScoreBreakdownEntry
         this.title = title;
         this.value = value;
     }
+}
+
+/// <summary>Lightweight room summary shown in the Tournament List browser.</summary>
+[Serializable]
+public class TournamentRoomSummary
+{
+    public string boardId;
+    public string roomName;
+    public int    playerCount;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -82,4 +93,56 @@ public class SubmitTournamentScoreResult
     public int    newRank;
     public int    matchesPlayed;
     public int    prizePool;
+}
+
+[Serializable]
+public class TournamentRoomListResult
+{
+    public bool success;
+    public string error;
+    public List<TournamentRoomSummary> rooms = new List<TournamentRoomSummary>();
+}
+
+[Serializable]
+public class CreateTournamentRoomResult
+{
+    public bool   success;
+    public string error;
+    public string boardId;
+    public TournamentBoardData board;
+    public TournamentPlayerEntry myEntry;
+}
+
+[Serializable]
+public class PayTournamentEntryResult
+{
+    public bool   success;
+    public bool   alreadyPaid;
+    public string error;
+    public TournamentBoardData board;
+    public TournamentPlayerEntry myEntry;
+}
+
+[Serializable]
+public class LeaveTournamentRoomResult
+{
+    public bool   success;
+    public string error;
+}
+
+/// <summary>Payload of a pending tournament payout the player hasn't been notified of yet.</summary>
+[Serializable]
+public class PendingTournamentReward
+{
+    public string roomName;
+    public int    rank;
+    public int    reward;
+    public int    prizePool;
+}
+
+[Serializable]
+public class CheckTournamentRewardResult
+{
+    public bool                  hasReward;
+    public PendingTournamentReward reward;
 }
