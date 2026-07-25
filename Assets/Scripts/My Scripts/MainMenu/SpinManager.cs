@@ -9,14 +9,24 @@ using UnityEngine;
 public struct WheelSegment
 {
     public string label;
-    public int    pcReward;   // 0 = LOSE
+    public int    pcReward;   // reference only — the server is authoritative on reward amount
 }
 
+/// <summary>
+/// Daily spin wheel — one free spin every 24 hours, enforced server-side via CloudScript
+/// (ClaimDailySpin / GetDailySpinStatus). The client never grants currency or decides the
+/// result locally; it only animates the wheel to whatever segment the server says won.
+///
+/// IMPORTANT: the `segments` array here must match DAILY_SPIN_SEGMENTS in CloudScript
+/// exactly — same order, same count (18) — since the server returns a segmentIndex that
+/// this script maps directly onto this array to compute the landing angle.
+/// </summary>
 public class SpinManager : MonoBehaviour
 {
     [Header("References")]
-    [SerializeField] private Transform  wheel;
-    [SerializeField] private GameObject spinButton;
+    [SerializeField] private Transform      wheel;
+    [SerializeField] private GameObject     spinButton;
+    [SerializeField] private PlayFabManager playFabManager;
 
     [Header("Spin Settings")]
     [SerializeField] private float minSpinDuration   = 4f;
@@ -25,27 +35,30 @@ public class SpinManager : MonoBehaviour
     [SerializeField] private float maxExtraRotations = 10f;
 
     [Header("Wheel Segments")]
+    [Tooltip("One entry per wedge, in order starting from the wedge at Z=0. Must match " +
+             "the server's DAILY_SPIN_SEGMENTS order exactly. Right-click → Reset To Default Segments.")]
     [SerializeField] private WheelSegment[] segments;
+
+    [Tooltip("Fine-tune if the wrong segment visually lands under the pointer. " +
+             "Adjust in small steps (±5°) until it lines up.")]
     [SerializeField] private float pointerOffsetDegrees = 0f;
 
     [Header("UI")]
     [Tooltip("Shows 'Spin Now!', result after a spin, or 'No Spin Available'")]
     [SerializeField] private TMP_Text resultText;
-    [Tooltip("Shows HH:MM:SS countdown until spins reset")]
+    [Tooltip("Shows 'Daily spin available!' or a 'Resets in HH:MM:SS' countdown")]
     [SerializeField] private TMP_Text timerText;
 
     // ─────────────────────────────────────────────────────────────
-    //  Spin allowance — 4 per 24 hours
+    //  State — synced from the server, never decided locally
     // ─────────────────────────────────────────────────────────────
 
-    private const int    MAX_SPINS_PER_DAY   = 4;
-    private const double RESET_HOURS         = 24.0;
-    private const string PREF_SPINS_LEFT     = "SpinManager_SpinsLeft";
-    private const string PREF_RESET_TIME     = "SpinManager_ResetTime";
-
-    private int      _spinsLeft;
-    private DateTime _nextResetUtc;
+    private bool     _available;
+    private DateTime _nextAvailableUtc = DateTime.UtcNow;
     private float    _ticker;
+    private bool     _statusSynced;
+
+    public bool IsSpinning { get; private set; }
 
     // ─────────────────────────────────────────────────────────────
     //  Lifecycle
@@ -55,13 +68,12 @@ public class SpinManager : MonoBehaviour
     {
         if (segments == null || segments.Length == 0)
             ResetToDefaultSegments();
-
-        LoadSpinState();
     }
 
     private void Start()
     {
         RefreshUI();
+        SyncStatusFromServer();
     }
 
     private void Update()
@@ -70,55 +82,111 @@ public class SpinManager : MonoBehaviour
         if (_ticker < 1f) return;
         _ticker = 0f;
 
-        // Auto-reset when the window expires
-        if (_spinsLeft == 0 && DateTime.UtcNow >= _nextResetUtc)
-        {
-            _spinsLeft = MAX_SPINS_PER_DAY;
-            SaveSpinState();
-        }
+        if (!_available && DateTime.UtcNow >= _nextAvailableUtc)
+            _available = true;
 
         RefreshUI();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Status sync (on load — purely for UI, server re-checks on Spin() anyway)
+    // ─────────────────────────────────────────────────────────────
+
+    private void SyncStatusFromServer()
+    {
+        PlayFabClientAPI.ExecuteCloudScript(
+            new ExecuteCloudScriptRequest
+            {
+                FunctionName = "GetDailySpinStatus",
+                GeneratePlayStreamEvent = false
+            },
+            result =>
+            {
+                DailySpinStatusResult status = Deserialize<DailySpinStatusResult>(result.FunctionResult);
+                if (status == null || !status.success) return;
+
+                _available        = status.available;
+                _nextAvailableUtc = EpochMsToUtc(status.nextAvailableAt);
+                _statusSynced     = true;
+
+                RefreshUI();
+            },
+            error => Debug.LogWarning($"[SpinManager] GetDailySpinStatus failed: {error.GenerateErrorReport()}"));
     }
 
     // ─────────────────────────────────────────────────────────────
     //  Public
     // ─────────────────────────────────────────────────────────────
 
-    public bool IsSpinning { get; private set; }
-
     public void Spin()
     {
-        if (IsSpinning)    return;
-        if (_spinsLeft <= 0)
+        if (IsSpinning) return;
+
+        if (_statusSynced && !_available)
         {
-            if (resultText != null) resultText.text = "No Spin Available";
+            ShowResult("No Spin Available");
             return;
         }
 
-        _spinsLeft--;
+        if (spinButton != null) spinButton.SetActive(false);
+        if (resultText != null) resultText.text = "Claiming...";
 
-        // Start the 24-hour window on the first spin of the day
-        if (_spinsLeft == MAX_SPINS_PER_DAY - 1)
-            _nextResetUtc = DateTime.UtcNow.AddHours(RESET_HOURS);
+        PlayFabClientAPI.ExecuteCloudScript(
+            new ExecuteCloudScriptRequest
+            {
+                FunctionName = "ClaimDailySpin",
+                GeneratePlayStreamEvent = false
+            },
+            result =>
+            {
+                ClaimDailySpinResult claim = Deserialize<ClaimDailySpinResult>(result.FunctionResult);
 
-        SaveSpinState();
-        StartCoroutine(SpinRoutine());
+                if (claim == null || !claim.success)
+                {
+                    _available        = false;
+                    _nextAvailableUtc = claim != null ? EpochMsToUtc(claim.nextAvailableAt) : DateTime.UtcNow;
+                    _statusSynced     = true;
+
+                    if (spinButton != null) spinButton.SetActive(false);
+                    ShowResult("No Spin Available");
+                    RefreshUI();
+                    return;
+                }
+
+                _available        = false;
+                _nextAvailableUtc = EpochMsToUtc(claim.nextAvailableAt);
+                _statusSynced     = true;
+
+                StartCoroutine(SpinRoutine(claim.segmentIndex, claim.reward, claim.label));
+            },
+            error =>
+            {
+                Debug.LogWarning($"[SpinManager] ClaimDailySpin failed: {error.GenerateErrorReport()}");
+                if (spinButton != null) spinButton.SetActive(true);
+                ShowResult("Something went wrong. Please try again.");
+            });
+    }
+
+    /// <summary>Sets the on-wheel result text AND surfaces the same message via
+    /// PlayFabManager.ShowErrorPublic — every outcome (win, lose, unavailable, error)
+    /// goes through here so it's shown consistently no matter what the result is.</summary>
+    private void ShowResult(string message)
+    {
+        if (resultText != null) resultText.text = message;
+        playFabManager?.ShowErrorPublic(message);
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Spin coroutine
+    //  Spin coroutine — animates to the server-chosen segment
     // ─────────────────────────────────────────────────────────────
 
-    private IEnumerator SpinRoutine()
+    private IEnumerator SpinRoutine(int segmentIndex, int reward, string label)
     {
         IsSpinning = true;
 
-        if (spinButton != null) spinButton.SetActive(false);
-        if (resultText != null) resultText.text = "";
-
         float duration       = UnityEngine.Random.Range(minSpinDuration, maxSpinDuration);
-        float targetAngle    = UnityEngine.Random.Range(0f, 360f);
         float extraRotations = UnityEngine.Random.Range(minExtraRotations, maxExtraRotations);
+        float targetAngle    = ComputeTargetAngleForSegment(segmentIndex);
 
         float startAngle = wheel.eulerAngles.z;
         float endAngle   = startAngle + (extraRotations * 360f) + targetAngle;
@@ -141,40 +209,24 @@ public class SpinManager : MonoBehaviour
 
         IsSpinning = false;
 
-        // Re-show spin button only if spins remain
-        if (spinButton != null)
-            spinButton.SetActive(_spinsLeft > 0);
+        Debug.Log($"[SpinManager] Landed on segment {segmentIndex} → {label} ({reward} PC), granted server-side.");
 
-        EvaluateResult(endAngle);
+        ShowResult(reward > 0 ? $"You won {reward:N0} PC!" : "Better luck next time!");
+        playFabManager?.RefreshCurrencies();
+
         RefreshUI();
     }
 
-    // ─────────────────────────────────────────────────────────────
-    //  Determine winning segment and grant reward
-    // ─────────────────────────────────────────────────────────────
-
-    private void EvaluateResult(float endAngle)
+    /// <summary>Inverse of the old client-side angle→segment mapping — finds the wheel
+    /// rotation that lands the pointer on the given segment's center.</summary>
+    private float ComputeTargetAngleForSegment(int segmentIndex)
     {
-        if (segments == null || segments.Length == 0) return;
+        if (segments == null || segments.Length == 0) return 0f;
 
-        float segmentSize     = 360f / segments.Length;
-        float normalizedAngle = ((endAngle % 360f) + 360f) % 360f;
-        float adjustedAngle   = (normalizedAngle + pointerOffsetDegrees + 360f) % 360f;
-        int   index           = Mathf.FloorToInt(adjustedAngle / segmentSize) % segments.Length;
+        float segmentSize   = 360f / segments.Length;
+        float segmentCenter = segmentIndex * segmentSize + segmentSize / 2f;
 
-        WheelSegment won = segments[index];
-
-        Debug.Log($"[SpinManager] Segment {index} → {won.label} ({won.pcReward} PC)");
-
-        if (resultText != null)
-        {
-            resultText.text = won.pcReward > 0
-                ? $"You won {won.pcReward:N0} PC!"
-                : "Better luck next time!";
-        }
-
-        if (won.pcReward > 0)
-            GrantPC(won.pcReward);
+        return (segmentCenter - pointerOffsetDegrees + 360f) % 360f;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -183,21 +235,16 @@ public class SpinManager : MonoBehaviour
 
     private void RefreshUI()
     {
-        bool hasSpins = _spinsLeft > 0;
+        if (IsSpinning) return;
 
-        // Spin button visibility (only when not mid-spin)
-        if (spinButton != null && !IsSpinning)
-            spinButton.SetActive(hasSpins);
+        if (spinButton != null)
+            spinButton.SetActive(_available);
 
-        // Result text default state
-        if (resultText != null && !IsSpinning)
+        if (resultText != null)
         {
-            // Only overwrite if it's currently showing a default/state string
-            // (don't overwrite mid-win message while timer ticks)
-            if (hasSpins)
+            if (_available)
             {
-                // Only reset to "Spin Now!" if not showing a won/lost result
-                if (resultText.text == "No Spin Available" || resultText.text == "")
+                if (resultText.text == "No Spin Available" || resultText.text == "Claiming..." || resultText.text == "")
                     resultText.text = "Spin Now!";
             }
             else
@@ -206,16 +253,15 @@ public class SpinManager : MonoBehaviour
             }
         }
 
-        // Timer text
         if (timerText != null)
         {
-            if (hasSpins)
+            if (_available)
             {
-                timerText.text = $"{_spinsLeft} / {MAX_SPINS_PER_DAY} spins left";
+                timerText.text = "Daily spin available!";
             }
             else
             {
-                TimeSpan remaining = _nextResetUtc - DateTime.UtcNow;
+                TimeSpan remaining = _nextAvailableUtc - DateTime.UtcNow;
                 if (remaining.TotalSeconds < 0) remaining = TimeSpan.Zero;
                 timerText.text = $"Resets in {(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
             }
@@ -223,53 +269,40 @@ public class SpinManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  PlayFab — grant PC
+    //  Helpers
     // ─────────────────────────────────────────────────────────────
 
-    private void GrantPC(int amount)
+    private static DateTime EpochMsToUtc(long ms) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime;
+
+    private static T Deserialize<T>(object functionResult) where T : class
     {
-        PlayFabClientAPI.AddUserVirtualCurrency(
-            new AddUserVirtualCurrencyRequest
-            {
-                VirtualCurrency = "PC",
-                Amount          = amount
-            },
-            result => Debug.Log($"[SpinManager] +{amount} PC granted. New balance: {result.Balance}"),
-            error  => Debug.LogWarning($"[SpinManager] Grant failed: {error.GenerateErrorReport()}"));
+        if (functionResult == null) return null;
+        string json = Newtonsoft.Json.JsonConvert.SerializeObject(functionResult);
+        return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(json);
+    }
+
+    [Serializable]
+    private class ClaimDailySpinResult
+    {
+        public bool   success;
+        public string error;
+        public int    segmentIndex;
+        public string label;
+        public int    reward;
+        public long   nextAvailableAt;
+    }
+
+    [Serializable]
+    private class DailySpinStatusResult
+    {
+        public bool success;
+        public bool available;
+        public long nextAvailableAt;
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Save / Load spin state
-    // ─────────────────────────────────────────────────────────────
-
-    private void SaveSpinState()
-    {
-        PlayerPrefs.SetInt(PREF_SPINS_LEFT, _spinsLeft);
-        PlayerPrefs.SetString(PREF_RESET_TIME, _nextResetUtc.Ticks.ToString());
-        PlayerPrefs.Save();
-    }
-
-    private void LoadSpinState()
-    {
-        _spinsLeft = PlayerPrefs.GetInt(PREF_SPINS_LEFT, MAX_SPINS_PER_DAY);
-
-        string saved = PlayerPrefs.GetString(PREF_RESET_TIME, "");
-        if (!string.IsNullOrEmpty(saved) && long.TryParse(saved, out long ticks))
-            _nextResetUtc = new DateTime(ticks, DateTimeKind.Utc);
-        else
-            _nextResetUtc = DateTime.UtcNow.AddHours(RESET_HOURS);
-
-        // If the reset time has already passed, restore full spins
-        if (_spinsLeft == 0 && DateTime.UtcNow >= _nextResetUtc)
-        {
-            _spinsLeft    = MAX_SPINS_PER_DAY;
-            _nextResetUtc = DateTime.UtcNow.AddHours(RESET_HOURS);
-            SaveSpinState();
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    //  Editor helper
+    //  Editor helper — right-click the component header to use
     // ─────────────────────────────────────────────────────────────
 
     [ContextMenu("Reset To Default Segments")]

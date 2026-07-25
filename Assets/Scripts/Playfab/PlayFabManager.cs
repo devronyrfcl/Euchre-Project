@@ -78,6 +78,8 @@ public class PlayFabManager : MonoBehaviour
 
     [Header(" Texts Arrays ")]
     [SerializeField] private TMP_Text[] displayNameTexts;
+    [Tooltip("Shortened display name — full name if 5 chars or fewer, otherwise first 5 chars + '...'")]
+    [SerializeField] private TMP_Text[] shortDisplayNameTexts;
     [SerializeField] private TMP_Text[] gpTexts;
     [SerializeField] private TMP_Text[] pcTexts;
     // ── Core progression ──────────────────────────────────────────
@@ -482,7 +484,10 @@ public class PlayFabManager : MonoBehaviour
                 if (string.IsNullOrEmpty(displayName))
                     setNamePanel.TurnOn();
                 else
+                {
                     SetTextArray(displayNameTexts, displayName);
+                    SetTextArray(shortDisplayNameTexts, GetShortName(displayName));
+                }
 
                 // Step 2
                 FetchPlayerStats();
@@ -695,6 +700,7 @@ public class PlayFabManager : MonoBehaviour
             result =>
             {
                 SetTextArray(displayNameTexts, result.DisplayName);
+                SetTextArray(shortDisplayNameTexts, GetShortName(result.DisplayName));
                 setNamePanel.TurnOff();
             },
             error =>
@@ -944,6 +950,13 @@ public class PlayFabManager : MonoBehaviour
         if (targets == null) return;
         foreach (var t in targets)
             if (t != null) t.text = value;
+    }
+
+    /// <summary>Full name if 5 characters or fewer, otherwise the first 5 characters + "...".</summary>
+    private string GetShortName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        return name.Length > 5 ? name.Substring(0, 5) + "..." : name;
     }
 
     // ─────────────────────────────────────────────────────────────

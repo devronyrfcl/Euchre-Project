@@ -22537,8 +22537,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -41.809467, y: -3.3}
-  m_SizeDelta: {x: 52.1914, y: 29.34}
+  m_AnchoredPosition: {x: -44.974174, y: -3.3}
+  m_SizeDelta: {x: 58.5208, y: 29.34}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &355783703
 MonoBehaviour:
@@ -22560,7 +22560,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Asad
+  m_text: AAAAA...
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -22591,8 +22591,8 @@ MonoBehaviour:
   m_fontSizeBase: 14
   m_fontWeight: 400
   m_enableAutoSizing: 0
-  m_fontSizeMin: 18
-  m_fontSizeMax: 72
+  m_fontSizeMin: 14
+  m_fontSizeMax: 16
   m_fontStyle: 0
   m_HorizontalAlignment: 1
   m_VerticalAlignment: 512
@@ -35579,13 +35579,14 @@ MonoBehaviour:
   signupPassField: {fileID: 2010998576}
   errorTitle: {fileID: 1625414686}
   displayNameTexts:
-  - {fileID: 355783703}
   - {fileID: 1233026085}
+  shortDisplayNameTexts:
+  - {fileID: 355783703}
   gpTexts:
-  - {fileID: 2072034871}
+  - {fileID: 849196952}
   - {fileID: 172100011}
   pcTexts:
-  - {fileID: 849196952}
+  - {fileID: 2072034871}
   - {fileID: 1526557705}
   playerLevelTexts:
   - {fileID: 682399274}
@@ -35718,6 +35719,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SpinManager
   wheel: {fileID: 1601293337}
   spinButton: {fileID: 390532150}
+  playFabManager: {fileID: 572366388}
   minSpinDuration: 4
   maxSpinDuration: 6
   minExtraRotations: 5

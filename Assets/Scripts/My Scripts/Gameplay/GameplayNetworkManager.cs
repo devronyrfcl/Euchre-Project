@@ -1927,7 +1927,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             playFabManager?.DistributeWinnings();
 
         int localTricks = _localSeat % 2 == 0 ? _team1Tricks : _team2Tricks;
-        playFabManager?.SaveMatchStats(localWon, localTricks, 5);
+        playFabManager?.SaveMatchStats(localWon, localTricks, 5, IsTournament);
 
         // ── Build full match stats for game over panel ─────────────
         MatchEndData endData = new MatchEndData

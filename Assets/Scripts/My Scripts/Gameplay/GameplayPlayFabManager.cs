@@ -408,7 +408,7 @@ public class GameplayPlayFabManager : MonoBehaviour
     /// Saves match result to PlayFab PlayerData.
     /// Reads existing stats, increments, then saves back.
     /// </summary>
-    public void SaveMatchStats(bool won, int tricksWon, int totalTricks)
+    public void SaveMatchStats(bool won, int tricksWon, int totalTricks, bool isTournament = false)
     {
         // Step 1: Fetch existing stats
         PlayFabClientAPI.GetUserData(
@@ -433,8 +433,10 @@ public class GameplayPlayFabManager : MonoBehaviour
                     stats.totalWinCoins += _config?.totalPot ?? 400;
                 }
 
-                // XP reward
-                int xpGain = won ? 20 : 5;
+                // XP reward — tournament matches count for more than a normal match
+                int xpGain = isTournament
+                    ? (won ? 50 : 15)
+                    : (won ? 20 : 5);
                 stats.playerXP = Mathf.Max(0, stats.playerXP + xpGain);
 
                 // Recalculate level

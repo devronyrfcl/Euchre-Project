@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <NotificationHistory xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <Notification id="4b533684-ed52-4c41-b6d9-aa6b213859c2" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-21 07:30" isRead="true" />
+  <Notification id="b406c41e-468d-43fb-91be-ca85ba4a5c0a" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 03:43" isRead="false" />
+  <Notification id="10d8359c-b90a-42c8-9e51-8d505d5512a8" title="Stats Saved" message="Your match stats have been saved to the server." timestamp="2026-07-26 03:42" isRead="false" />
+  <Notification id="130ca83e-1d78-4792-b2ef-2a5901ee01a2" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 03:42" isRead="false" />
+  <Notification id="b571afd5-fc07-48cf-970b-c90264147b80" title="Stats Saved" message="Your match stats have been saved to the server." timestamp="2026-07-26 03:37" isRead="false" />
+  <Notification id="f5766a89-2d2f-4f1a-acee-0c01a7240744" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 03:37" isRead="false" />
+  <Notification id="8de16104-28f4-44b1-a98c-58ccbe6e34da" title="Stats Saved" message="Your match stats have been saved to the server." timestamp="2026-07-26 03:36" isRead="false" />
+  <Notification id="99826d63-0338-4ad7-b0ad-e8baf880062b" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 03:36" isRead="false" />
+  <Notification id="44acec05-2397-42a1-bceb-446848a1cb20" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 03:30" isRead="false" />
+  <Notification id="864602a2-37ec-4455-a503-24276de45eb0" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 03:29" isRead="false" />
+  <Notification id="7e2623b5-e1f2-4183-93a0-0024953c490f" title="Stats Saved" message="Your match stats have been saved to the server." timestamp="2026-07-26 03:26" isRead="false" />
+  <Notification id="4ad91579-1ab9-44b1-92e7-02f09ee6a8ed" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 03:26" isRead="false" />
+  <Notification id="51796ce4-b185-4d4e-9ab9-ee83581db604" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 01:18" isRead="false" />
+  <Notification id="3d61046e-b911-4e57-a7fb-6bd40132b305" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-07-26 01:09" isRead="false" />
 </NotificationHistory>
