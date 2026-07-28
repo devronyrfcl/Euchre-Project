@@ -32305,30 +32305,30 @@ MonoBehaviour:
   shuffleCardPrefab: {fileID: 5963904012700633656, guid: 684ee0fa527bfee44837944d32afbda2, type: 3}
   playableCardPrefab: {fileID: 7815852559978397608, guid: 2bc20a23206f5ba4da7ac3fc70201b6e, type: 3}
   cardSprites:
-  - {fileID: -7093347352776104356, guid: 629595230984d8b459154b6340d1876d, type: 3}
-  - {fileID: 5198730108963152106, guid: 03336dbefb3b3b44f937fdcc50a669ce, type: 3}
-  - {fileID: -1693021186793410292, guid: b756fe3d34c98084595081e59db3e7f8, type: 3}
-  - {fileID: -1271845477247858728, guid: b59ecf5ce5cd3bd4ab9c4f91c6c8bb90, type: 3}
-  - {fileID: 4341654296511395979, guid: dd4028451999c6141bf8942d015f6ec6, type: 3}
-  - {fileID: 8280126569596737880, guid: b03087c130ee5bc4ea0fc27b879c66e2, type: 3}
-  - {fileID: 4195594251272899776, guid: c2106df6971a20c47843c6709090e7a6, type: 3}
-  - {fileID: -7784005575302520153, guid: 22ce3da329bc05f4794518f6a930938a, type: 3}
-  - {fileID: 5687351913871015476, guid: a8902cf02a7c9bb4295777b7282b04ac, type: 3}
-  - {fileID: -7155984214126192100, guid: 08676ace6b906404aa2c49070059d688, type: 3}
-  - {fileID: 5635647390217602801, guid: e2a367f86f442a5469ed752e225034bd, type: 3}
-  - {fileID: 7804399734870880084, guid: d9c1d840284c7174ba0d968e07203bde, type: 3}
-  - {fileID: -6579198171644279483, guid: 6a3a5c25cf9ec024d908f04628563fd1, type: 3}
-  - {fileID: 8983099192675523686, guid: d7fb7e103bb61b14eb9581331f7869b5, type: 3}
-  - {fileID: -4730936491008622549, guid: 13be9bd6d6ca6fa41ab0710754eeff00, type: 3}
-  - {fileID: 8144853587694090996, guid: c4755a3cabbc641479a7d73920efe363, type: 3}
-  - {fileID: -4752842612297548325, guid: f0337cb7f7f24ee4c93c1d2e9f1a8974, type: 3}
-  - {fileID: 1258021703749278702, guid: 2f5e96b76d9bbdb44b6d83ec9618f0c2, type: 3}
-  - {fileID: -108309334505281048, guid: b8e0be364b6be3a4485ac6fce5bbf402, type: 3}
-  - {fileID: 7314985485351411599, guid: 2ad3f0f27173b2e419d7a0d273ff1845, type: 3}
-  - {fileID: 6663333463460842409, guid: 9b7d7986b274a0447b6a3a76a81408d8, type: 3}
-  - {fileID: -8545324090672044874, guid: 31c79b0fbbe8d9b489c111909a04bc47, type: 3}
-  - {fileID: -2996728973668875431, guid: c211a0db68cc7794e9aae515492ad286, type: 3}
-  - {fileID: -1438989920213866481, guid: 47f3b6fadeaaa77499d0020757e0353b, type: 3}
+  - {fileID: 21300000, guid: 629595230984d8b459154b6340d1876d, type: 3}
+  - {fileID: 21300000, guid: 03336dbefb3b3b44f937fdcc50a669ce, type: 3}
+  - {fileID: 21300000, guid: b756fe3d34c98084595081e59db3e7f8, type: 3}
+  - {fileID: 21300000, guid: b59ecf5ce5cd3bd4ab9c4f91c6c8bb90, type: 3}
+  - {fileID: 21300000, guid: dd4028451999c6141bf8942d015f6ec6, type: 3}
+  - {fileID: 21300000, guid: b03087c130ee5bc4ea0fc27b879c66e2, type: 3}
+  - {fileID: 21300000, guid: c2106df6971a20c47843c6709090e7a6, type: 3}
+  - {fileID: 21300000, guid: 22ce3da329bc05f4794518f6a930938a, type: 3}
+  - {fileID: 21300000, guid: 9b7d7986b274a0447b6a3a76a81408d8, type: 3}
+  - {fileID: 21300000, guid: 31c79b0fbbe8d9b489c111909a04bc47, type: 3}
+  - {fileID: 21300000, guid: c211a0db68cc7794e9aae515492ad286, type: 3}
+  - {fileID: 21300000, guid: 47f3b6fadeaaa77499d0020757e0353b, type: 3}
+  - {fileID: 21300000, guid: a8902cf02a7c9bb4295777b7282b04ac, type: 3}
+  - {fileID: 21300000, guid: 08676ace6b906404aa2c49070059d688, type: 3}
+  - {fileID: 21300000, guid: e2a367f86f442a5469ed752e225034bd, type: 3}
+  - {fileID: 21300000, guid: d9c1d840284c7174ba0d968e07203bde, type: 3}
+  - {fileID: 21300000, guid: 6a3a5c25cf9ec024d908f04628563fd1, type: 3}
+  - {fileID: 21300000, guid: d7fb7e103bb61b14eb9581331f7869b5, type: 3}
+  - {fileID: 21300000, guid: 13be9bd6d6ca6fa41ab0710754eeff00, type: 3}
+  - {fileID: 21300000, guid: c4755a3cabbc641479a7d73920efe363, type: 3}
+  - {fileID: 21300000, guid: f0337cb7f7f24ee4c93c1d2e9f1a8974, type: 3}
+  - {fileID: 21300000, guid: 2f5e96b76d9bbdb44b6d83ec9618f0c2, type: 3}
+  - {fileID: 21300000, guid: b8e0be364b6be3a4485ac6fce5bbf402, type: 3}
+  - {fileID: 21300000, guid: 2ad3f0f27173b2e419d7a0d273ff1845, type: 3}
   cardBackSprite: {fileID: 21300000, guid: c5f54d0b84bef354b8bbbeb812087405, type: 3}
   dealerPickupSlot: {fileID: 1918342121}
   notificationManager: {fileID: 1354523856}

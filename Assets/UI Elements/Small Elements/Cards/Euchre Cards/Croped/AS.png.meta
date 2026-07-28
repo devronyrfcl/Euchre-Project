@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 6a3a5c25cf9ec024d908f04628563fd1
+guid: 2ad3f0f27173b2e419d7a0d273ff1845
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -6579198171644279483
-    second: Cards-18_0
+      213: 7314985485351411599
+    second: Cards-21_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -46,7 +46,7 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 2
+  spriteMode: 1
   spriteExtrude: 1
   spriteMeshType: 1
   alignment: 0
@@ -109,16 +109,29 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Cards-18_0
+      name: Cards-21_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 184
+        width: 183
         height: 254
       alignment: 0
       pivot: {x: 0, y: 0}
@@ -128,8 +141,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 5454e38fe1ef1b4a0800000000000000
-      internalID: -6579198171644279483
+      spriteID: f8f528fda8c048560800000000000000
+      internalID: 7314985485351411599
       vertices: []
       indices: 
       edges: []
@@ -138,7 +151,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 5e97eb03825dee720800000000000000
     internalID: 0
     vertices: []
     indices: 
@@ -148,7 +161,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Cards-18_0: -6579198171644279483
+      Cards-21_0: 7314985485351411599
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

@@ -1591,8 +1591,33 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             ? _trickOrder[winnerTrickIdx]
             : _dealerSeat;
 
+        string playedCardsStr = string.Join(", ", _played.ConvertAll(CardToReadable));
+        string winningCardStr = CardToReadable(_played[winnerTrickIdx]);
+        string trumpStr       = SuitName(_trump);
+        Debug.Log($"[Trick] {playedCardsStr}\nWin card is: {winningCardStr}. trump was {trumpStr}.");
+
         photonView.RPC(nameof(RPC_TrickWon), RpcTarget.All, winnerSeat);
     }
+
+    // ─────────────────────────────────────────────────────────────
+    //  READABLE CARD NAMES (for debug logging)
+    // ─────────────────────────────────────────────────────────────
+
+    private static readonly Dictionary<char, string> RANK_NAMES = new Dictionary<char, string>
+        { {'9',"9"}, {'T',"10"}, {'J',"J"}, {'Q',"Q"}, {'K',"K"}, {'A',"A"} };
+
+    private static readonly Dictionary<char, string> SUIT_NAMES = new Dictionary<char, string>
+        { {'C',"Club"}, {'D',"Diamond"}, {'H',"Heart"}, {'S',"Spade"} };
+
+    private string CardToReadable(string cardType)
+    {
+        if (string.IsNullOrEmpty(cardType) || cardType.Length < 2) return cardType;
+        string rank = RANK_NAMES.TryGetValue(cardType[0], out string r) ? r : cardType[0].ToString();
+        return $"{rank}({SuitName(cardType[1])})";
+    }
+
+    private string SuitName(char suit) =>
+        SUIT_NAMES.TryGetValue(suit, out string name) ? name : suit.ToString();
 
     /*[PunRPC]
     private void RPC_TrickWon(int winnerSeat)
