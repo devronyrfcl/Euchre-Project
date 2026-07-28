@@ -17,7 +17,7 @@ using UnityEngine.UI;
 ///
 /// Called by GameplayNetworkManager when it is the local player's turn.
 /// </summary>
-public class TrumpSelectionUI : MonoBehaviour
+public class TrumpSelectionUI : MonoBehaviour, ITrumpSelectionUI
 {
     // ─────────────────────────────────────────────────────────────
     //  Inspector References

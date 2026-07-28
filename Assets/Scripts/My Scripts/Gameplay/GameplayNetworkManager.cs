@@ -41,6 +41,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameplayPlayFabManager playFabManager;
     [SerializeField] private EuchreCardManager      cardManager;
     [SerializeField] private TrumpSelectionUI       trumpUI;
+    [Tooltip("Used instead of trumpUI when MatchConfig.matchType == \"rated\" — no go-alone option.")]
+    [SerializeField] private TrumpSelectionUIForRatedGame trumpUIForRatedGame;
     [SerializeField] private TeamVoteUI             teamVoteUI;
     [SerializeField] private GameOverUI             gameOverUI;
     [SerializeField] private NotificationManagerInGame notificationManager;
@@ -160,6 +162,11 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     // Tournament scoring (only populated when _config.matchType == "tournament")
     private List<ScoreBreakdownEntry> _tournamentBreakdown = new List<ScoreBreakdownEntry>();
     private bool IsTournament => _config != null && _config.matchType == "tournament";
+
+    // Rated matches: always team mode (no vote), and trump selection has no go-alone option.
+    private bool IsRatedMatch => _config != null && _config.matchType == "rated";
+    private ITrumpSelectionUI ActiveTrumpUI =>
+        IsRatedMatch ? (ITrumpSelectionUI)trumpUIForRatedGame : trumpUI;
 
     // Cached positions for game-over return animation
     private Vector2 _p1InitPos, _p2InitPos, _p3InitPos, _p4InitPos;
@@ -866,7 +873,21 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         _teamVoteNo    = 0;
         _localVoteDone = false;
 
-        StartCoroutine(IntroThenVote());
+        // Rated matches are always team mode — no TeamVoteUI popup, no vote.
+        if (IsRatedMatch)
+            StartCoroutine(IntroThenAutoTeamMode());
+        else
+            StartCoroutine(IntroThenVote());
+    }
+
+    /// <summary>Rated-match variant of IntroThenVote — plays the same intro slide
+    /// animation but skips TeamVoteUI entirely and locks the match to team mode.</summary>
+    private IEnumerator IntroThenAutoTeamMode()
+    {
+        yield return StartCoroutine(PlayIntroAnimation());
+
+        if (PhotonNetwork.IsMasterClient)
+            photonView.RPC(nameof(RPC_TeamVoteResult), RpcTarget.All, true);
     }
 
     private IEnumerator IntroThenVote()
@@ -1200,7 +1221,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
         bool canOrderUp = isDealer || HasNaturalTrump(_localSeat, upcardSuit);
 
-        trumpUI?.ShowPhase1(upcardSuit, canPass: !forced, canOrderUp: canOrderUp,
+        ActiveTrumpUI?.ShowPhase1(upcardSuit, canPass: !forced, canOrderUp: canOrderUp,
             onOrderUp: () =>
             {
                 // Defensive re-check — the button is disabled when this is false,
@@ -1258,7 +1279,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         playFabManager?.ClearSelectingTrump();
         AudioManager.Instance.PlaySFX("TrumpSelected");
-        trumpUI?.Hide();
+        ActiveTrumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), suit);
 
         if (pickerSeat == _localSeat)
@@ -1384,7 +1405,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         System.Func<char, bool> canCallSuit = suit => isDealer || HasNaturalTrump(_localSeat, suit);
 
-        trumpUI?.ShowPhase2(excludedSuit, canPass: !forced, canCallSuit: canCallSuit,
+        ActiveTrumpUI?.ShowPhase2(excludedSuit, canPass: !forced, canCallSuit: canCallSuit,
             onSuitPicked: (suit) =>
             {
                 // Defensive re-check — the button is disabled when this is false,
@@ -1414,7 +1435,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         playFabManager?.ClearSelectingTrump();
         AudioManager.Instance.PlaySFX("TrumpSelected");
-        trumpUI?.Hide();
+        ActiveTrumpUI?.Hide();
         playFabManager.SetTrump(RemapSeatToPanel(pickerSeat), _trump);
         cardManager?.HideUpcard();
 
@@ -2191,7 +2212,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_IllegalTrumpCall(int callerSeat)
     {
-        trumpUI?.Hide();
+        ActiveTrumpUI?.Hide();
         playFabManager?.ClearSelectingTrump();
         turnTimer?.StopTimer();
 

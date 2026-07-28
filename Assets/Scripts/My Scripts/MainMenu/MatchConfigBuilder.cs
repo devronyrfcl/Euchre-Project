@@ -36,6 +36,23 @@ public class MatchConfigBuilder : MonoBehaviour
         LoadGameplayScene();
     }
 
+    /// <summary>
+    /// Called by "Rated Match" button. Connects and fills seats exactly like a public
+    /// match, but the resulting match is always team mode (no TeamVoteUI popup) and
+    /// trump selection has no go-alone option (see TrumpSelectionUIForRatedGame).
+    /// </summary>
+    public void BuildRatedMatch()
+    {
+        MatchConfig config = BuildBase();
+        config.matchType    = "rated";
+        config.roomCode     = "";
+        config.allowBots    = true;
+        config.botFillDelay = BotFillDelayForPublicMatch;
+
+        MatchConfigLoader.Save(config);
+        LoadGameplayScene();
+    }
+
     /// <summary>Called by "Private Match" button. Pass in the room code from your input field.</summary>
     public void BuildPrivateMatch(string roomCode)
     {
@@ -63,6 +80,20 @@ public class MatchConfigBuilder : MonoBehaviour
         config.roomCode     = "";
         config.allowBots    = true;
         config.botFillDelay = 5f;     // fill immediately
+
+        MatchConfigLoader.Save(config);
+        LoadGameplayScene();
+    }
+
+    /// <summary>Called by "Offline Match" button. Same as solo, except there's no wait
+    /// for other players — all empty seats fill with bots instantly.</summary>
+    public void BuildOfflineMatch()
+    {
+        MatchConfig config = BuildBase();
+        config.matchType    = "offline";
+        config.roomCode     = "";
+        config.allowBots    = true;
+        config.botFillDelay = 0f;     // no wait — fill with bots instantly
 
         MatchConfigLoader.Save(config);
         LoadGameplayScene();

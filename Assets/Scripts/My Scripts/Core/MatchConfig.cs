@@ -9,7 +9,7 @@ using System.Collections.Generic;
 public class MatchConfig
 {
     // ─── Match Setup ──────────────────────────────────────────────
-    public string matchType   = "public";   // "public" | "private" | "solo" | "tournament"
+    public string matchType   = "public";   // "public" | "private" | "solo" | "tournament" | "rated" | "offline"
     public string gameMode    = "standard"; // "standard" | "freeforall"
     public string roomCode      = "";
     public bool   isRoomCreator = false;  // true = create room, false = join by code
