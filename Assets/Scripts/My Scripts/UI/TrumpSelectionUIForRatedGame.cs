@@ -77,7 +77,7 @@ public class TrumpSelectionUIForRatedGame : MonoBehaviour, ITrumpSelectionUI
     //  PHASE 1 — Order Up / Pass
     // ─────────────────────────────────────────────────────────────
 
-    public void ShowPhase1(char upcardSuit, bool canPass, bool canOrderUp,
+    public void ShowPhase1(char upcardSuit, string upcardCardType, bool canPass, bool canOrderUp,
                             Action onOrderUp, Action onPass)
     {
         _onOrderUp = onOrderUp;
@@ -94,7 +94,10 @@ public class TrumpSelectionUIForRatedGame : MonoBehaviour, ITrumpSelectionUI
         suitButtonGroup?.SetActive(false);
 
         if (upcardSuitIcon != null)
-            upcardSuitIcon.sprite = GetSuitSprite(upcardSuit);
+        {
+            Sprite cardSprite = EuchreCardManager.Instance?.GetCardSprite(upcardCardType);
+            upcardSuitIcon.sprite = cardSprite != null ? cardSprite : GetSuitSprite(upcardSuit);
+        }
 
         orderUpButton?.gameObject.SetActive(true);
         SetSuitButtonState(orderUpButton, canOrderUp);

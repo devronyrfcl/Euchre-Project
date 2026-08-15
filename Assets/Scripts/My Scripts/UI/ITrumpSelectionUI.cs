@@ -8,8 +8,11 @@ using System;
 public interface ITrumpSelectionUI
 {
     /// <summary>canOrderUp: false when the player lacks a natural trump card (house rule) —
-    /// the dealer is always exempt from this requirement.</summary>
-    void ShowPhase1(char upcardSuit, bool canPass, bool canOrderUp, Action onOrderUp, Action onPass);
+    /// the dealer is always exempt from this requirement.
+    /// upcardCardType: full card code (e.g. "9C") so the popup can show the actual upcard
+    /// instead of just its suit icon.</summary>
+    void ShowPhase1(char upcardSuit, string upcardCardType, bool canPass, bool canOrderUp,
+                     Action onOrderUp, Action onPass);
 
     /// <summary>canCallSuit: per-suit natural-trump check (house rule) — the dealer is always
     /// exempt, so pass a predicate that always returns true for the dealer.</summary>

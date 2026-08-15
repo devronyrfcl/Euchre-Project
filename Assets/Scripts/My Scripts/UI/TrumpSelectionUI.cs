@@ -99,7 +99,7 @@ public class TrumpSelectionUI : MonoBehaviour, ITrumpSelectionUI
     /// canOrderUp: false when the player lacks a natural trump card (house rule) —
     ///             the dealer is always exempt from this requirement.
     /// </summary>
-    public void ShowPhase1(char upcardSuit, bool canPass, bool canOrderUp,
+    public void ShowPhase1(char upcardSuit, string upcardCardType, bool canPass, bool canOrderUp,
                             Action onOrderUp, Action onPass)
     {
         _onOrderUp    = onOrderUp;
@@ -113,13 +113,16 @@ public class TrumpSelectionUI : MonoBehaviour, ITrumpSelectionUI
                 ? "Order up this suit as trump, or pass."
                 : "You must order up — dealer's choice.";
 
-        // Show upcard suit icon
+        // Show the actual upcard face
         upcardDisplay?.SetActive(true);
         suitButtonGroup?.SetActive(false);
         goAloneGroup?.SetActive(false);
 
         if (upcardSuitIcon != null)
-            upcardSuitIcon.sprite = GetSuitSprite(upcardSuit);
+        {
+            Sprite cardSprite = EuchreCardManager.Instance?.GetCardSprite(upcardCardType);
+            upcardSuitIcon.sprite = cardSprite != null ? cardSprite : GetSuitSprite(upcardSuit);
+        }
 
         orderUpButton?.gameObject.SetActive(true);
         SetSuitButtonState(orderUpButton, canOrderUp);

@@ -1221,7 +1221,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         char upcardSuit = upcard.Length > 1 ? upcard[1] : 'S';
         bool canOrderUp = isDealer || HasNaturalTrump(_localSeat, upcardSuit);
 
-        ActiveTrumpUI?.ShowPhase1(upcardSuit, canPass: !forced, canOrderUp: canOrderUp,
+        ActiveTrumpUI?.ShowPhase1(upcardSuit, upcard, canPass: !forced, canOrderUp: canOrderUp,
             onOrderUp: () =>
             {
                 // Defensive re-check — the button is disabled when this is false,
