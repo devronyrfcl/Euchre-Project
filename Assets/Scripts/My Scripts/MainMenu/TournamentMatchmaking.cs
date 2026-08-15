@@ -257,9 +257,17 @@ public class TournamentMatchmaking : MonoBehaviourPunCallbacks
 
     private void SetLocalPlayerProperties()
     {
+        // Mirror what GameplayNetworkManager.OnConnectedToMaster() sets for
+        // non-tournament matches — tournament matches skip that method entirely
+        // (already connected/in-room from here), so this is the only place
+        // these properties get pushed before other clients read them.
         ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
         {
-            { "PFId", playFabManager != null ? playFabManager.CachedPlayFabId : "" }
+            { "PFId", playFabManager != null ? playFabManager.CachedPlayFabId   : "" },
+            { "Name", playFabManager != null ? playFabManager.CachedDisplayName : "" },
+            { "Avt",  playFabManager != null ? playFabManager.CachedAvatarUrl   : "" },
+            { "PC",   playFabManager != null ? playFabManager.CachedPokerChips  : 0  },
+            { "Bot",  false }
         };
         PhotonNetwork.LocalPlayer.SetCustomProperties(props);
     }

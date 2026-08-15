@@ -1039,7 +1039,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         foreach (string card in tempDeck)
         {
             revealSequence.Add(card);
-            if (card == "JC") { firstDealer = seat; break; }
+            if (card == "JC" || card == "JS") { firstDealer = seat; break; } // first black jack
             seat = (seat + 1) % 4;
         }
 
@@ -1699,7 +1699,6 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (winnerSeat == _localSeat)
         {
             DailyTaskManager.Instance?.IncrementTask(TaskType.WinTricks);
-            AddTournamentScore("Trick Won", 10);
         }
 
         _played.Clear();
@@ -1805,7 +1804,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             if (wentAlone)
             {
                 // Solo player is on team 1
-                if (_team1Tricks == 5)      pts1 = 5; // all 5 alone = 5 pts (house rule)
+                if (_team1Tricks == 5)      pts1 = 4; // all 5 alone = 4 pts
                 else if (_team1Tricks >= 3) pts1 = 1; // 3 or 4 tricks = 1 pt
                 else                        pts2 = 2; // euchred = 2 pts to opponents
             }
@@ -1820,7 +1819,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         {
             if (wentAlone)
             {
-                if (_team2Tricks == 5)      pts2 = 5; // all 5 alone = 5 pts (house rule)
+                if (_team2Tricks == 5)      pts2 = 4; // all 5 alone = 4 pts
                 else if (_team2Tricks >= 3) pts2 = 1;
                 else                        pts1 = 2;
             }
@@ -1841,15 +1840,47 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         if (localTeamMarch)
             DailyTaskManager.Instance?.IncrementTask(TaskType.MarchWin);
 
-        // Tournament scoring — march / go-alone bonuses for the local team's hand result
-        bool localTeamCalledTrump = team1Called == (_localSeat % 2 == 0);
-        bool localTeamWentAloneAndWon = wentAlone && localTeamCalledTrump &&
-            ((_localSeat % 2 == 0 && _team1Tricks == 5) || (_localSeat % 2 == 1 && _team2Tricks == 5));
+        // Tournament individual scoring (spec table):
+        //   Make Trump 3/4 tricks  → +1 each active player on the calling team
+        //   Make Trump 5 tricks    → +2 each active player on the calling team
+        //   Euchre opposing team   → +2 each defending player
+        //   Successful lone hand   → caller +5, partner +4 (even though partner sat out), opponents 0
+        //   Lone hand euchred      → caller/partner 0, opponents +4 each
+        if (IsTournament)
+        {
+            int  callingTeamTricks    = team1Called ? _team1Tricks : _team2Tricks;
+            bool localOnCallingTeam   = team1Called == (_localSeat % 2 == 0);
+            bool localIsCaller        = _localSeat == _trumpPickerSeat;
+            bool localIsCallersPartner = _localSeat == (_trumpPickerSeat + 2) % 4;
 
-        if (localTeamWentAloneAndWon)
-            AddTournamentScore("Went Alone Bonus", 30);
-        else if (localTeamMarch)
-            AddTournamentScore("March Bonus", 20);
+            if (wentAlone)
+            {
+                if (callingTeamTricks == 5)
+                {
+                    if (localIsCaller)              AddTournamentScore("Successful Loner", 5);
+                    else if (localIsCallersPartner) AddTournamentScore("Loner Partner Bonus", 4);
+                }
+                else if (callingTeamTricks < 3)
+                {
+                    if (!localOnCallingTeam) AddTournamentScore("Euchred the Loner", 4);
+                }
+                else if (localIsCaller)
+                {
+                    // 3 or 4 tricks while alone isn't in the spec's Loner table —
+                    // fall back to the standard "made trump" credit for the caller.
+                    AddTournamentScore("Made Trump", 1);
+                }
+            }
+            else if (localOnCallingTeam)
+            {
+                if (callingTeamTricks == 5)      AddTournamentScore("Made Trump — March", 2);
+                else if (callingTeamTricks >= 3) AddTournamentScore("Made Trump", 1);
+            }
+            else if (callingTeamTricks < 3)
+            {
+                AddTournamentScore("Euchred Opposing Team", 2);
+            }
+        }
 
         // Build hand result summary for game over panel
         string handSummary = BuildHandSummary(pts1, pts2, wentAlone, team1Called);
@@ -1889,7 +1920,7 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         {
             if (pts1 > 0)
             {
-                if (_team1Tricks == 5 && wentAlone) result = "March Alone! +5 pts";
+                if (_team1Tricks == 5 && wentAlone) result = "March Alone! +4 pts";
                 else if (_team1Tricks == 5)         result = "March! +2 pts";
                 else                                result = "Made it! +1 pt";
             }

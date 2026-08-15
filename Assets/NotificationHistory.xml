@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <NotificationHistory xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Notification id="49613614-ceb4-4873-8bb8-e2d718ca3bd9" title="Stats Saved" message="Your match stats have been saved to the server." timestamp="2026-08-15 10:16" isRead="false" />
+  <Notification id="6a92ca0e-7deb-4bd6-8014-9756e7b53651" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 10:16" isRead="false" />
   <Notification id="a8f754e3-854c-44e0-a7eb-ff6acac5f293" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 13:15" isRead="false" />
   <Notification id="2ce50a04-e627-4d68-973a-0b841177e1be" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 13:12" isRead="false" />
   <Notification id="8bac2133-16c7-4c71-8568-f50cab7d82f0" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 12:56" isRead="false" />
