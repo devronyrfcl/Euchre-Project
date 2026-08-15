@@ -38,12 +38,6 @@ public class EuchreCardManager : MonoBehaviour
     [SerializeField] private List<Sprite> cardSprites = new List<Sprite>();
     [SerializeField] private Sprite       cardBackSprite;
 
-    [Header("=== DEALER PICKUP ===")]
-    [Tooltip("Where the picked-up upcard visually lands as a 6th hand card, before the dealer discards. Position it just above/beside the hand fan.")]
-    [SerializeField] private RectTransform dealerPickupSlot;
-
-    
-
     [Header("=== Error Panel ===")]
     [SerializeField] private NotificationManagerInGame notificationManager;
 
@@ -422,25 +416,25 @@ public class EuchreCardManager : MonoBehaviour
         _handCards.Add(cardUI);
         _pickupCardUI = cardUI;
 
-        Vector2 destPos = dealerPickupSlot != null
-            ? dealerPickupSlot.anchoredPosition
-            : HAND_POSITIONS[4] + new Vector2(0f, 60f);
+        // Extrapolate one step past the last fan anchor so the 6th card leans in
+        // at the same angle as the rest of the hand instead of sitting flat.
+        int last = HAND_POSITIONS.Length - 1;
+        Vector2 destPos = HAND_POSITIONS[last] + (HAND_POSITIONS[last] - HAND_POSITIONS[last - 1]);
+        float   destRot = HAND_ROTATIONS_Z[last] + (HAND_ROTATIONS_Z[last] - HAND_ROTATIONS_Z[last - 1]);
 
-        rt.DOAnchorPos(destPos, 0.3f).SetEase(Ease.OutBack);
+        rt.DOAnchorPos(destPos, 0.3f).SetEase(Ease.OutBack)
+            .OnComplete(() => cardUI?.RefreshRestState());
         rt.DOScale(Vector3.one, 0.3f).SetEase(Ease.OutBack);
+        rt.DOLocalRotate(new Vector3(0f, 0f, destRot), 0.3f).SetEase(Ease.OutCubic);
     }
 
-    /// <summary>Removes the tapped card from hand and reports the discard to the network layer.
-    /// If the dealer discards one of their original 5 cards (keeping the picked-up card),
-    /// the picked-up card slides into the fan slot the discarded card vacated.</summary>
+    /// <summary>Removes the tapped card from hand, reflows the remaining 5 cards back
+    /// into the fan to close the gap, and reports the discard to the network layer.</summary>
     private void HandleDiscardTap(EuchreCardUI tappedCard)
     {
         if (tappedCard == null) return;
 
-        string cardType            = tappedCard.CardType;
-        bool   keptPickupCard      = tappedCard != _pickupCardUI && _pickupCardUI != null;
-        int    vacatedSlot         = tappedCard.SlotIndex;
-        int    vacatedSiblingIndex = tappedCard.transform.GetSiblingIndex();
+        string cardType = tappedCard.CardType;
 
         _discardMode = false;
 
@@ -449,27 +443,58 @@ public class EuchreCardManager : MonoBehaviour
 
         _handCards.Remove(tappedCard);
         Destroy(tappedCard.gameObject);
-
-        if (keptPickupCard)
-        {
-            EuchreCardUI pickup = _pickupCardUI;
-            int slot = Mathf.Clamp(vacatedSlot, 0, HAND_POSITIONS.Length - 1);
-
-            // Match sibling order too, so overlap/layering under PlayerCardHolder
-            // matches where the discarded card used to sit in the fan.
-            pickup.transform.SetSiblingIndex(vacatedSiblingIndex);
-
-            RectTransform rt = pickup.GetComponent<RectTransform>();
-            rt.DOAnchorPos(HAND_POSITIONS[slot], 0.3f)
-                .SetEase(Ease.OutBack)
-                .OnComplete(() => pickup.RefreshRestState());
-            rt.DOLocalRotate(new Vector3(0f, 0f, HAND_ROTATIONS_Z[slot]), 0.3f)
-                .SetEase(Ease.OutCubic);
-        }
-
         _pickupCardUI = null;
 
+        ReflowHand();
+
         GameplayNetworkManager.Instance?.LocalDiscardCard(cardType);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  HAND REFLOW (close the gap left by a played/discarded card)
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Re-spaces the remaining hand cards across the same fan curve used for
+    /// a full 5-card hand, so removing a card slides its neighbors in to close the gap
+    /// instead of leaving an empty slot.</summary>
+    private void ReflowHand()
+    {
+        int n = _handCards.Count;
+        if (n == 0) return;
+
+        for (int i = 0; i < n; i++)
+        {
+            EuchreCardUI card = _handCards[i];
+            if (card == null) continue;
+
+            float t = n == 1 ? 0.5f : (float)i / (n - 1);
+            Vector2 pos = SampleCurve(HAND_POSITIONS, t);
+            float   rot = SampleCurve(HAND_ROTATIONS_Z, t);
+
+            card.SetSlotIndex(i);
+            card.transform.SetSiblingIndex(i);
+
+            RectTransform rt = card.GetComponent<RectTransform>();
+            rt.DOAnchorPos(pos, 0.25f).SetEase(Ease.OutCubic)
+                .OnComplete(() => card.RefreshRestState());
+            rt.DOLocalRotate(new Vector3(0f, 0f, rot), 0.25f).SetEase(Ease.OutCubic);
+        }
+    }
+
+    private Vector2 SampleCurve(Vector2[] points, float t)
+    {
+        float scaled = t * (points.Length - 1);
+        int   idx0   = Mathf.Clamp(Mathf.FloorToInt(scaled), 0, points.Length - 1);
+        int   idx1   = Mathf.Clamp(idx0 + 1, 0, points.Length - 1);
+        return Vector2.Lerp(points[idx0], points[idx1], scaled - idx0);
+    }
+
+    private float SampleCurve(float[] points, float t)
+    {
+        float scaled = t * (points.Length - 1);
+        int   idx0   = Mathf.Clamp(Mathf.FloorToInt(scaled), 0, points.Length - 1);
+        int   idx1   = Mathf.Clamp(idx0 + 1, 0, points.Length - 1);
+        return Mathf.Lerp(points[idx0], points[idx1], scaled - idx0);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -655,6 +680,7 @@ public class EuchreCardManager : MonoBehaviour
         // Remove from hand
         _handCards.Remove(selected);
         Destroy(selected.gameObject);
+        ReflowHand();
 
         // Notify network
         if (GameplayNetworkManager.Instance != null)
@@ -913,6 +939,7 @@ public class EuchreCardManager : MonoBehaviour
 
         _handCards.Remove(toPlay);
         Destroy(toPlay.gameObject);
+        ReflowHand();
 
         GameplayNetworkManager.Instance?.LocalPlayCard(cardType);
     }
