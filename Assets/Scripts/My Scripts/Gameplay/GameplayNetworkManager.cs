@@ -1353,6 +1353,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
         SetState(GameState.Playing);
         SetStatus("Trump selected — game begins!");
 
+        cardManager?.SortHandByTrump(_trump, ALT_SUITS[_trump]);
+
         if (PhotonNetwork.IsMasterClient)
             StartCoroutine(DelayThen(() =>
             {
@@ -1444,6 +1446,8 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
 
         SetState(GameState.Playing);
         SetStatus("Trump chosen — game begins!");
+
+        cardManager?.SortHandByTrump(_trump, ALT_SUITS[_trump]);
 
         notificationManager.ShowWarningMessagePulse($"Trump is {_trump}!");
 

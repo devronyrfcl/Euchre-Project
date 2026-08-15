@@ -77,6 +77,9 @@ public class EuchreCardUI : MonoBehaviour
     /// so the selection raise animation doesn't jump back to the old spot.</summary>
     public void RefreshRestState() => CacheRestState();
 
+    /// <summary>Updates the fan slot this card occupies (e.g. after a hand re-sort).</summary>
+    public void SetSlotIndex(int slotIndex) => SlotIndex = slotIndex;
+
     // ─────────────────────────────────────────────────────────────
     //  Interactability
     // ─────────────────────────────────────────────────────────────

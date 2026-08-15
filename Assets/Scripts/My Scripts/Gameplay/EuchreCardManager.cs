@@ -473,6 +473,78 @@ public class EuchreCardManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  HAND SORT (group by suit once trump is known)
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>Re-orders the local hand so trump (including the left bower)
+    /// leads, followed by the remaining suits grouped together, highest card
+    /// first within each group. Call once trump is finalized.</summary>
+    public void SortHandByTrump(char trump, char leftBowerSuit)
+    {
+        if (_handCards.Count == 0) return;
+
+        List<EuchreCardUI> sorted = new List<EuchreCardUI>(_handCards);
+        sorted.Sort((a, b) =>
+        {
+            int groupA = SuitSortGroup(a.CardType, trump, leftBowerSuit);
+            int groupB = SuitSortGroup(b.CardType, trump, leftBowerSuit);
+            if (groupA != groupB) return groupA.CompareTo(groupB);
+
+            int rankA = RankValue(a.CardType, trump, leftBowerSuit);
+            int rankB = RankValue(b.CardType, trump, leftBowerSuit);
+            return rankB.CompareTo(rankA);
+        });
+
+        for (int i = 0; i < sorted.Count && i < HAND_POSITIONS.Length; i++)
+        {
+            EuchreCardUI card = sorted[i];
+            card.SetSlotIndex(i);
+            card.transform.SetSiblingIndex(i);
+
+            RectTransform rt = card.GetComponent<RectTransform>();
+            rt.DOAnchorPos(HAND_POSITIONS[i], 0.3f)
+                .SetEase(Ease.OutBack)
+                .OnComplete(() => card.RefreshRestState());
+            rt.DOLocalRotate(new Vector3(0f, 0f, HAND_ROTATIONS_Z[i]), 0.3f)
+                .SetEase(Ease.OutCubic);
+        }
+
+        _handCards = sorted;
+    }
+
+    private int SuitSortGroup(string cardType, char trump, char leftBowerSuit)
+    {
+        char type = cardType[0];
+        char suit = cardType[1];
+        bool isTrump = suit == trump || (type == 'J' && suit == leftBowerSuit);
+        if (isTrump) return 0;
+
+        const string order = "CDHS";
+        int idx = order.IndexOf(suit);
+        return idx + 1;
+    }
+
+    private int RankValue(string cardType, char trump, char leftBowerSuit)
+    {
+        char type = cardType[0];
+        char suit = cardType[1];
+
+        if (type == 'J' && suit == trump) return 100;       // right bower
+        if (type == 'J' && suit == leftBowerSuit) return 99; // left bower
+
+        switch (type)
+        {
+            case 'A': return 6;
+            case 'K': return 5;
+            case 'Q': return 4;
+            case 'J': return 3;
+            case 'T': return 2;
+            case '9': return 1;
+            default:  return 0;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
     //  CARD SELECTION (local player's turn)
     // ─────────────────────────────────────────────────────────────
 
