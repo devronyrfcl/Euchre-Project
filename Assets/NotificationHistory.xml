@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <NotificationHistory xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <Notification id="49613614-ceb4-4873-8bb8-e2d718ca3bd9" title="Stats Saved" message="Your match stats have been saved to the server." timestamp="2026-08-15 10:16" isRead="false" />
-  <Notification id="6a92ca0e-7deb-4bd6-8014-9756e7b53651" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 10:16" isRead="false" />
-  <Notification id="a8f754e3-854c-44e0-a7eb-ff6acac5f293" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 13:15" isRead="false" />
-  <Notification id="2ce50a04-e627-4d68-973a-0b841177e1be" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 13:12" isRead="false" />
-  <Notification id="8bac2133-16c7-4c71-8568-f50cab7d82f0" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 12:56" isRead="false" />
-  <Notification id="9e9afbd0-8f75-48bc-8d5c-06f8cf175018" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 12:55" isRead="false" />
-  <Notification id="bccaf3a6-b66e-4af1-aba4-d6a96c12496f" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 12:54" isRead="false" />
-  <Notification id="31946119-5904-46c0-9746-5e35240d9339" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 12:51" isRead="false" />
-  <Notification id="d5a31068-0948-4f20-8fcd-97c346a0f6c7" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 12:49" isRead="false" />
-  <Notification id="546f54f9-dc1c-47e2-bc01-8dd4e153bbbf" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-15 12:41" isRead="false" />
+  <Notification id="d2813636-3f4f-40f7-b94f-73690258350e" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 13:47" isRead="false" />
+  <Notification id="70452af4-8a83-400e-be02-5c5a4f05e072" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 13:44" isRead="false" />
+  <Notification id="3f703dc9-a09e-4299-9f42-2d877b276107" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 13:43" isRead="false" />
+  <Notification id="50e616a4-2ef9-4f8d-af56-bf3f7400df88" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 13:40" isRead="false" />
+  <Notification id="8cfbda91-9c09-4ed0-8af1-f4de9e15ec95" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 13:39" isRead="false" />
+  <Notification id="394bc20d-a216-4e08-a04b-5632b5f1ec84" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 09:50" isRead="false" />
+  <Notification id="b5396986-452a-411f-98c5-3d3fb6f5c611" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 09:48" isRead="false" />
+  <Notification id="0c23e291-67b5-4ec5-92a5-1d5b1059d958" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 09:47" isRead="false" />
+  <Notification id="84f4517c-ed4a-453a-b328-8afaeafbc6a6" title="Welcome Back" message="Good to see you again, ! Ready to play?" timestamp="2026-08-22 09:44" isRead="false" />
 </NotificationHistory>

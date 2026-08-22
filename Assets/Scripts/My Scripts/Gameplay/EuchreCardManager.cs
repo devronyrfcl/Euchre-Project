@@ -217,19 +217,29 @@ public class EuchreCardManager : MonoBehaviour
         int dealerPanel = RemapSeatToPanel(dealerSeat, localSeat);
         Vector2 dealerOrigin = GetDealerOrigin(dealerPanel);
 
-        // Deal 5 cards to each of 4 players
-        // Panel 0 = me, 1 = partner, 2 = left, 3 = right
-        for (int cardIdx = 0; cardIdx < 5; cardIdx++)
-        {
-            for (int panel = 0; panel < 4; panel++)
-            {
-                // Skip dealer panel as source (they deal out)
-                Vector2 destination = panel == 0
-                    ? LOCAL_RECEIVE_POS
-                    : DEAL_THROW_POSITIONS[panel];
+        // Deal 5 cards to each of 4 players, in the same two-pass 2-3-2-3 / 3-2-3-2
+        // batches (starting left of the dealer) that GameplayNetworkManager.DealCards()
+        // actually deals with, so the animation matches the real deal order.
+        int[][] passCounts = { new[] { 2, 3, 2, 3 }, new[] { 3, 2, 3, 2 } };
+        int startSeat = (dealerSeat + 1) % 4;
 
-                SpawnShuffleCard(dealerOrigin, destination, panel);
-                yield return new WaitForSeconds(0.22f);
+        foreach (int[] counts in passCounts)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                int seat  = (startSeat + i) % 4;
+                int panel = RemapSeatToPanel(seat, localSeat);
+                int count = counts[i];
+
+                for (int c = 0; c < count; c++)
+                {
+                    Vector2 destination = panel == 0
+                        ? LOCAL_RECEIVE_POS
+                        : DEAL_THROW_POSITIONS[panel];
+
+                    SpawnShuffleCard(dealerOrigin, destination, panel);
+                    yield return new WaitForSeconds(0.22f);
+                }
             }
         }
 

@@ -1125,13 +1125,13 @@ public class GameplayNetworkManager : MonoBehaviourPunCallbacks
             _deck[j]   = tmp;
         }
 
-        // Traditional dealing pattern: first pass 3-2-3-2, second pass 2-3-2-3,
+        // Dealing pattern: first pass 2-3-2-3, second pass 3-2-3-2,
         // starting from the seat left of the dealer. Every seat still ends up
         // with exactly 5 cards — this only changes the order cards are handed out.
         for (int seat = 0; seat < 4; seat++)
             _hands[seat] = new List<string>();
 
-        int[][] passCounts = { new[] { 3, 2, 3, 2 }, new[] { 2, 3, 2, 3 } };
+        int[][] passCounts = { new[] { 2, 3, 2, 3 }, new[] { 3, 2, 3, 2 } };
         int startSeat = (_dealerSeat + 1) % 4;
         int deckCursor = 0;
 
